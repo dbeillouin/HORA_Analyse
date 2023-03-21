@@ -70,7 +70,7 @@ setwd("D:/02_Bioversity/41_HORA/R")
 
 #Chargement de la base de données
 #DB_0 <- read.csv("~/Downloads/DB_HORA_final_V0 - Final.csv")
-DB_0 <- read_xlsx("../DB_HORA_20230103.xlsx",sheet="Articles caractérisés")
+DB_0 <- read_sheet('https://docs.google.com/spreadsheets/d/1Z5JiEmVaUu4gPKbWE-lNxg1dDTyRpCsC5CGii4EUQm8/edit#gid=0', sheet = "Articles caractérisés")
 
 #Transformation des coordonnées GPS
 #Il y a deux formes de données GPS, celles au format 42,654563°N et celles au format 34°23'45,750W.Les premières nécéssitent uniquement des changements de caractères. Les secondes nécessites "measurments" pour passer de ddmmss,sss au format décimal. On sépare les cas via l'apostrophe (2 types d'apostrophes) et on met au format de la fonction du package measurments
