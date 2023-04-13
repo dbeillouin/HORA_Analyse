@@ -1,44 +1,135 @@
 ## Script to map data points and make whittaker graph
-## Damien Beillouin
-## 21 march 2023
+## Damien Beillouin, Sarah Jones
+## 21 march 2023 last updated 13 April 2023
 
+## Load Packages
 library(mapproj)
+library(magrittr)
+library(googlesheets4)
+library(readxl)
+library(igraph)
+library(tidyverse)
+library(measurements)
+library(Ternary)
 
-# import lookup table of country-regions
-databasis_region <- read_excel("./databasis_region.xlsx")
+setwd("D:/02_Bioversity/41_HORA/R")
 
-# format data for mapping
+# import files 
+kew <- read_xlsx("./FoodPlants_SOTWPF2020.xlsx",sheet=1)
+d <- read_sheet('https://docs.google.com/spreadsheets/d/1Z5JiEmVaUu4gPKbWE-lNxg1dDTyRpCsC5CGii4EUQm8/edit#gid=0', sheet = "Articles caractérisés")
+list_species <- read_sheet('https://docs.google.com/spreadsheets/d/1Z5JiEmVaUu4gPKbWE-lNxg1dDTyRpCsC5CGii4EUQm8/edit#gid=390873745', sheet = "list_speciesDB")
+unsd <- read.csv("UNSD — Methodology.csv",header=TRUE, sep = ";") # download here: https://unstats.un.org/unsd/methodology/m49/overview/
+
+# format country names to match UNSD standard and join datasets
+d <- d %>% 
+  mutate(country = ifelse(country == "USA","United States of America",
+                          ifelse(country == "Bengladesh","Bangladesh",
+                                 ifelse(country == "Bolivia", "Bolivia (Plurinational State of)", 
+                                        ifelse(country == "Vietnam", "Viet Nam",
+                                               ifelse(country == "Venezuela", "Venezuela (Bolivarian Republic of)",
+                                                      ifelse(country %in% c("England","United Kingdom"), "United Kingdom of Great Britain and Northern Ireland",
+                                                             ifelse(country == "Virgin Islands", "United States Virgin Islands",
+                                                                    ifelse(country == "Turkey", "Türkiye",
+                                                                           ifelse(country == "Tanzania", "United Republic of Tanzania",
+                                                                                  ifelse(country == "Ivory Coast", "Côte d’Ivoire",
+                                                                                         ifelse(country == "at Pallekelle", "Sri Lanka",
+                                                                                                ifelse(country == "Hawaii", "United States of America",
+                                                                                                       ifelse(country == "Maroc", "Morocco",
+                                                                                                              ifelse(country == "Bulgary", "Bulgaria",
+                                                                                                                     ifelse(country == "Iran", "Iran (Islamic Republic of)",
+                                                                                                                            ifelse(country == "Czech Republic", "Czechia",
+                                                                                                                                   ifelse(country == "Brazil;Argentina;Paraguay", "Brazil",
+                                                                                                                                          ifelse(country == "Russia", "Russian Federation",country))))))))))))))))))) %>%
+  mutate(country = ifelse(source_id == 7430,"Benin",
+                          ifelse(source_id == 4619,"China",country))) 
+
+d <- d %>%   left_join(unsd,by=c("country"="Country.or.Area")) %>%rename("Region"="Region.Name") 
+
+d <- d %>% 
+  mutate(`farm size` = as.character(`farm size`),
+         `Duration of study` = as.character(`Duration of study`),
+         soil = as.character(soil),
+         `tree age treatment` = as.character(`tree age treatment`),
+         `fertiliser N treatment` = as.character(`fertiliser N treatment`),
+         `Tree age control` = as.character(`Tree age control`),
+         `fertiliser N control` = as.character(`fertiliser N control`),
+         `tillage control` = as.character(`tillage control`),
+         `raw density` = as.character(`raw density`),
+         `row N treatment` = as.character(`row N treatment`),
+         `row N control` = as.character(`row N control`))
+
+# convert lat and long to decimal degrees
+# from either decimal degrees with a comma instead of point separation (format 42,654563°N)
+# or degrees, minutes, seconds (format 34°23'45,750W or 34°23’45,750W or 34°23′45,750W)
+# We use the measurement package to convert the second type.
+
+d <- d %>% mutate(latitude = ifelse(latitude=="NA",NA,latitude),
+                  longitude = ifelse(longitude=="NA",NA,longitude))
+#d$latitude[i]
+#CODE[i]
+#grepl("'|′",d$latitude[i])
+
+CODE <- grepl("'|′|’",d$latitude) 
+
+for(i in 1:length(d$latitude)){
+  
+  if(CODE[i] == TRUE){
+    
+    d$latitude[i] <-gsub("°"," ",d$latitude[i]) 
+    d$latitude[i] <-gsub("'"," ",d$latitude[i])
+    d$latitude[i] <-gsub("′"," ",d$latitude[i])
+    d$latitude[i] <-gsub(",",".",d$latitude[i])
+    
+    d$longitude[i] <-gsub("°"," ",d$longitude[i])
+    d$longitude[i] <-gsub("'"," ",d$longitude[i])
+    d$longitude[i] <-gsub("′"," ",d$longitude[i])
+    d$longitude[i] <-gsub(",",".",d$longitude[i])
+    
+    # Format Lat S and Long W
+    
+    d$latitude[i] <- if (grepl("S",d$latitude)[i] == TRUE) {paste0("-",d$latitude[i])}else {d$latitude[i]} 
+    d$longitude[i]<- if (grepl("W",d$longitude[i]) == TRUE) {paste0("-",d$longitude[i])}else {d$longitude[i]}
+    
+    # Format all lat and long
+    
+    d$latitude[i] <-gsub("N","",d$latitude[i])
+    d$latitude[i] <-gsub("S","",d$latitude[i])
+    d$longitude[i] <-gsub("E","",d$longitude[i])
+    d$longitude[i] <-gsub("W","",d$longitude[i])
+    
+    # Convert to decimal degrees
+    
+    d$latitude[i] <- measurements::conv_unit(d$latitude[i], from = "deg_min_sec", to = "dec_deg")
+    d$longitude[i] <- measurements::conv_unit(d$longitude[i], from = "deg_min_sec", to = "dec_deg")
+  }
+  
+  else {
+    d$latitude[i] <-gsub("°","",d$latitude[i])
+    d$latitude[i] <-gsub(",",".",d$latitude[i])
+    
+    d$longitude[i] <-gsub("°","",d$longitude[i])
+    d$longitude[i] <-gsub(",",".",d$longitude[i])
+    
+    # Format Lat S and Long W
+    
+    d$latitude[i] <- if (grepl("S",d$latitude[i]) == TRUE) {paste0("-",d$latitude[i])}else {d$latitude[i]}
+    d$longitude[i]<- if (grepl("W",d$longitude[i]) == TRUE) {paste0("-",d$longitude[i])}else {d$longitude[i]}
+    
+    # Convert to decimal degrees
+    
+    d$latitude[i] <-gsub("N","",d$latitude[i])
+    d$latitude[i] <-gsub("S","",d$latitude[i])
+    d$longitude[i] <-gsub("E","",d$longitude[i])
+    d$longitude[i] <-gsub("W","",d$longitude[i])
+  }
+}
+
+#### Map number of experiments per region ####
+
 world <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf")
-country <- data.frame(world$geounit)
-#write.csv(country,'country_region.csv')
-DB1_country <- data.frame(left_join(DB_0,databasis_region,by=c('country'='geounit')))
-
-#### Map nombre d'articles par régions ####
-
-DB1_country_unique<- DB1_country %>%
-  distinct(New.ID,latitude,longitude, .keep_all = TRUE)
-
-occ_region <- data.frame(table(DB1_country_unique$region))
-occ_geounit <- data.frame(table(DB1_country_unique$country))
-
-names(occ_geounit)[1] <- 'geounit'
-names(occ_geounit)[2] <- 'no_articles'
-occ_geounit$no_articles2 <- cut(occ_geounit$no_articles,breaks=c(as.numeric(0),as.numeric(1),as.numeric(5),as.numeric(10),as.numeric(20),as.numeric(30),as.numeric(50),as.numeric(70)))
-
-names(occ_geounit)[1] <- 'country'
-names(occ_geounit)[2] <- 'no_articles'
-world$geounit <-tolower(world$geounit)
-occ_geounit$countyr <- tolower(occ_geounit$country)
-
-# we change the names of the geounit to make them match between the 2 table
-
-world$geounit<-plyr::revalue(world$geounit,c("united kingdom"="uk","united states of america"="usa"))
-setdiff(world$geounit,occ_geounit$country)
-
-# merging map background and data
-
-T0world2<-merge(world,occ_geounit, all=TRUE)
-world2 <- T0world2 #%>% select(geounit,no_articles)
+#ne_country <- data.frame(country_ne=world$region) %>% unique()
+#d <- d %>% left_join(ne_country,by=("country"="country_ne"))
+#d_id_unique <- d %>% distinct(source_id,latitude,longitude, .keep_all = TRUE)
 
 # drawing the map
 plain <- theme(
@@ -54,47 +145,54 @@ plain <- theme(
 
 world <- map_data("world")
 worldplot <- ggplot() +
-  geom_polygon(data = world, aes(x=long, y = lat, group = group)) + 
-  coord_fixed(1.3)
+  geom_polygon(data = world, aes(x=long, y = lat, group = group),fill="white",colour="black") + 
+  #coord_fixed(1.3)+
+  coord_map("mollweide")+
+  plain
 worldplot
 
-names(occ_geounit)[1]<-'region'
-world$region<-tolower(world$region)
-worldSubset <- left_join(world, occ_geounit, by = "region")
+d$latitude<-as.numeric(d$latitude)
+d$longitude<-as.numeric(d$longitude)
 
-ggplot(data = worldSubset, mapping = aes(x = long, y = lat, group = group)) + 
-  #coord_fixed(1.3) +
-  coord_map("mollweide")+
-  geom_polygon(aes(fill = no_articles)) +
-  scale_fill_distiller(palette ="RdBu", direction = -1) + # or direction=1
-  ggtitle("What a beautiful map") +
-  plain
+names(d)
+d_map <- d %>% group_by(source_id,`Intervention in our classification`,latitude,longitude) %>%
+  summarise(n_experiments = n()) %>%
+  rename("treatment" = "Intervention in our classification") %>%
+  filter(!(is.na(latitude))&!(is.na(longitude))) %>%
+  mutate(latitude = as.numeric(latitude),
+         longitude = as.numeric(longitude))
 
-DB_0$latitude<-as.numeric(DB_0$latitude)
-DB_0$longitude<-as.numeric(DB_0$longitude)
+world <- world %>% filter(region !="Antarctica")
 
-ggplot() +
-  geom_map(
-    data = worldSubset %>% filter(!(region %in% c("antarctica"))), map = world,
-    aes(long, lat, map_id = region, fill= no_articles ), color = "black", size = 0.1
-  ) +
-  coord_map("mollweide")+
+g <- ggplot() + 
+  geom_polygon(data = world,
+               aes(x=long, y = lat, group = group), 
+           fill="white",color = "black", 
+           linewidth = 0.1) +
+  #coord_sf(default_crs =sf::st_crs(4326))+
+  coord_map("mollweide")+ # azequalarea
+  #coord_fixed(1.3)+
   theme(panel.background = element_rect(fill = "white"),
         panel.grid = element_blank(),
         axis.line = element_blank(),
         axis.ticks = element_blank(),
         axis.text = element_blank(),
         axis.title = element_blank(),
-        legend.position = "None")+
-  geom_point(
-    data = DB_0,
-    shape=21,
-    fill= "purple",
-    aes(longitude, latitude),
-    alpha = 0.7)+
-  scale_fill_gradient2(na.value="white" )
+        legend.position = "None") +
+  geom_point(data = arrange(d_map,desc(n_experiments)), 
+             aes(x=longitude,y=latitude,colour=treatment,size=n_experiments),
+             alpha = 0.7,
+             shape=20)+
+  scale_colour_viridis_d(7)+
+  scale_size_continuous(breaks=c(1,5,10,50),range=c(2,10))
 
-#+
+g
+
+library(cowplot)
+legend <- get_legend(g+theme(legend.position="bottom"))
+
+#
+#scale_fill_gradient2(na.value="white")+
 #  scale_fill_manual(values = wes_palette("GrandBudapest1", n = 80))
 
 ### Whitetaker - this part needs updating ####
@@ -186,3 +284,31 @@ ggplot(world2) +
   #  pad_x = unit(0.05, "in"), pad_y = unit(0.5, "in"),
   #   style = north_arrow_fancy_orienteering) +
   theme(legend.position="bottom")
+
+### Removed code ####
+
+# import lookup table of country-regions
+#databasis_region <- read_excel("./databasis_region.xlsx")
+
+#write.csv(country,'country_region.csv')
+#DB1_country <- data.frame(left_join(DB_0,databasis_region,by=c('country'='geounit')))
+
+occ_region <- data.frame(table(d_id_unique$Region))
+occ_geounit <- data.frame(table(d_id_unique$country))
+
+names(occ_geounit)[1] <- 'country'
+names(occ_geounit)[2] <- 'no_articles'
+occ_geounit$no_articles2 <- cut(occ_geounit$no_articles,breaks=c(as.numeric(0),as.numeric(1),as.numeric(5),as.numeric(10),as.numeric(20),as.numeric(30),as.numeric(50),as.numeric(70)))
+
+world$geounit <-tolower(world$geounit)
+occ_geounit$country <- tolower(occ_geounit$country)
+
+# we change the names of the geounit to make them match between the 2 tables
+
+world$geounit<-plyr::revalue(world$geounit,c("united kingdom"="uk","united states of america"="usa"))
+setdiff(world$geounit,occ_geounit$country)
+
+# merging map background and data
+
+T0world2<-merge(world,occ_geounit, all=TRUE)
+world2 <- T0world2 #%>% select(geounit,no_articles)
