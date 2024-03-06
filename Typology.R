@@ -18,6 +18,8 @@ library(dplyr)          # Data manipulation and transformation
 library(magrittr)       # Pipe operator (%>%)
 library(xml2)           # pour read_html
 library(rvest)          # pour scrapping
+library(tidyverse)      # for data formatting
+
 
 # Load Data
 url_caract <- 'https://docs.google.com/spreadsheets/d/1Z5JiEmVaUu4gPKbWE-lNxg1dDTyRpCsC5CGii4EUQm8/edit#gid=328818542'
@@ -34,8 +36,8 @@ DATA <- gsheet2tbl(url_data)
 DATA$`tree age treatment`<- as.numeric(DATA$`tree age treatment`)
 
 # Complete Common name
- CARACT<- data.frame(AA)
- names(CARACT)[1]<-"NAME"
+ CARACT<- data.frame(CARACT)
+ #names(CARACT)[1]<-"NAME"
  CARACT$`Common Name`<- "NA"
 #
 # CARACT$`Common Name2` <- ifelse(CARACT$`Common Name`=="NA",
@@ -519,6 +521,8 @@ VERIF<- VERIF %>% filter(Freq>1)
 
 ################################ Analysis #############################
 
+
+
 # Create a new data frame TAB_FINALE with relevant columns
 TAB_FINALE <- DATA %>%
   mutate(NB_sp = str_count(`species treatment`, ',') + 1) %>%
@@ -666,6 +670,7 @@ result <- result %>%
     Concatenation %in% c("H_Wood", "NH_Herb, H_Wood") ~ "(NH_Herb), H_Wood",
     TRUE ~ "Autre"
   ))
+
 TAB_FINALE$numéro<-as.character(TAB_FINALE$numéro)
 setdiff(TAB_FINALE$numéro,result$numéro)
 setdiff(result$numéro,TAB_FINALE$numéro)
@@ -753,6 +758,14 @@ TAB_FINALE <- TAB_FINALE %>%
          TRUE ~ "Other"
    ))
 
+TAB_FINALE <- TAB_FINALE %>% 
+  mutate(Intervention_by_composition = ifelse(Categorie =="(NH_Herb), NH_Wood, H_Herb","Classic",
+                                              ifelse(Categorie =="(NH_Herb), H_Herb, H_Wood","Exclusive",
+                                                     ifelse(Categorie =="(NH_Herb), H_Wood","Woody exclusive",
+                                                            ifelse(Categorie =="(NH_Herb), NH_Wood, H_Herb, H_Wood","Complex",
+                                                                   ifelse(Categorie =="(NH_Herb), NH_Wood, H_Wood","Woody classic","check"))))))
+
+
 # Je vais faire un graphique pour mettre cela au propre
 library(tidyverse)
 library(network)
@@ -820,7 +833,7 @@ edges <- edges %>%
 edges <- select(edges, from, to, weight)
 
 nodes_d3 <- mutate(nodes, id = id - 1)
-nodes_d3$color=c("blue","blue","blue","blue","blue","blue","blue","blue","blue","gray")
+nodes_d3$color=c("blue","blue","blue","blue","blue","blue","blue","blue","gray")
 edges_d3 <- mutate(edges, from = from - 1, to = to - 1)
 
 
@@ -1255,8 +1268,7 @@ tree_age<-DATA2  %>%
                      values_from = "n") %>%
   replace(is.na(.), 0)%>%
   mutate_if(is.character, as.numeric) %>%
-  rowwise()
-%>%
+  rowwise() %>%
   mutate(total     = sum(c_across(where(is.numeric))),
          Wild      = sum(across(contains("wild"))),
          Prop_wild = Wild/total)  %>%
@@ -1295,10 +1307,10 @@ TAB_FINALE$PROP_Woody2<-logit(TAB_FINALE$PROP_Woody2)
 TAB_FINALE$numéro<-as.character(TAB_FINALE$numéro)
 DATA_FINAL_SARAH<- TAB_FINALE %>% left_join(DATA)
 
-write.csv(TAB_FINALE, 'TAB_FINALE.HORA.csv')
+write.csv(TAB_FINALE, 'TAB_FINALE.HORA_20240306.csv')
 
 
-# #### Mannual typology
+# #### Manual typology
 #
 # JJ<- DATA2 %>% dplyr::select("New ID","numéro", "Intervention_reclass")
 # unique_combinations <- distinct(JJ, `New ID`, numéro, Intervention_reclass)

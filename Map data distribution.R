@@ -1,22 +1,27 @@
 ## Script to map data points and make whittaker graph
 ## Damien Beillouin, Sarah Jones
-## 21 march 2023 last updated 13 April 2023
+## 21 march 2023 last updated 6 March 2024
 
 ## Load Packages
 library(mapproj)
 library(magrittr)
-library(googlesheets4)
+library(googlesheets4)  # Interface with Google Sheets API v4
 library(readxl)
 library(igraph)
 library(tidyverse)
 library(measurements)
 library(Ternary)
+library(usethis) # for git configuration
 
-setwd("D:/02_Bioversity/41_HORA/R")
+#use_git_config(user.name= "Sarah Jones",user.email = "s.jones@cgiar.org")
+
+#setwd("D:/02_Bioversity/41_HORA/R")
+#setwd("C:/Users/sjones/OneDrive - CGIAR/Documents/HORA_Analyse")
 
 # import files 
 kew <- read_xlsx("./FoodPlants_SOTWPF2020.xlsx",sheet=1)
 d <- read_sheet('https://docs.google.com/spreadsheets/d/1Z5JiEmVaUu4gPKbWE-lNxg1dDTyRpCsC5CGii4EUQm8/edit#gid=0', sheet = "Articles caractérisés")
+d_typology <- read.csv("TAB_FINALE.HORA_20240306.csv") 
 list_species <- read_sheet('https://docs.google.com/spreadsheets/d/1Z5JiEmVaUu4gPKbWE-lNxg1dDTyRpCsC5CGii4EUQm8/edit#gid=390873745', sheet = "list_speciesDB")
 unsd <- read.csv("UNSD — Methodology.csv",header=TRUE, sep = ";") # download here: https://unstats.un.org/unsd/methodology/m49/overview/
 
@@ -41,13 +46,16 @@ d <- d %>%
                                                                                                                                    ifelse(country == "Brazil;Argentina;Paraguay", "Brazil",
                                                                                                                                           ifelse(country == "Russia", "Russian Federation",country))))))))))))))))))) %>%
   mutate(country = ifelse(source_id == 7430,"Benin",
-                          ifelse(source_id == 4619,"China",country))) 
+                          ifelse(source_id == 4619,"China",
+                                 ifelse(country =="Quebec","Canada",
+                                        ifelse(country=="DR Congo","Democratic Republic of the Congo",country)))))
 
-d <- d %>%   left_join(unsd,by=c("country"="Country.or.Area")) %>%rename("Region"="Region.Name") 
+d <- d %>%   left_join(unsd,by=c("country"="Country.or.Area")) #%>%rename("Region"="Region.Name") 
 
 d <- d %>% 
   mutate(`farm size` = as.character(`farm size`),
          `Duration of study` = as.character(`Duration of study`),
+         Intervention_reclass = as.character(Intervention_reclass),
          soil = as.character(soil),
          `tree age treatment` = as.character(`tree age treatment`),
          `fertiliser N treatment` = as.character(`fertiliser N treatment`),
@@ -58,12 +66,59 @@ d <- d %>%
          `row N treatment` = as.character(`row N treatment`),
          `row N control` = as.character(`row N control`))
 
+
+# Clean the intervention classes
+d <- d %>%
+  mutate(Intervention_reclass = ifelse(Intervention_reclass %in% c("Alley-cropping","Alley cropping","alley cropping","alley-cropping","Alley cropping /complex mutli-strata agroforestry","Alley-cropping, complex multi-strata systems","Alley-cropping/ complex multi-strata systems","Alley cropping, multistrata","Alley cropping/ complex multi-strata agroforestry", "alley-cropping/hedgerows"),"Alley cropping",
+                                       ifelse(Intervention_reclass %in% c("multistata",  "multi strata","multistrata", "complex multi-strata-agroforestry systems", "Complex multistrata systems","multi-strata","multi-strata?","complex multi-strata agroforestry","complex multi-strata system","Complex multi-strata agroforestry"),"Multi-strata systems",
+                                              ifelse(Intervention_reclass %in% c("Parkland","parkland?","parkland"),"Parkland",
+                                                     ifelse(Intervention_reclass %in% c("Herdgerows","complex multi-strata-agroforestry systems/hedgerows"),"Hedgerows",
+                                                            ifelse(Intervention_reclass %in% c("fallows","Alley cropping, fallows"), "Fallows",
+                                                                   ifelse(Intervention_reclass %in% c("Shaded systems","?","NA"),"Other/unknown",Intervention_reclass)))))))
+unique(d$Intervention_reclass)
+
+
+# add typology to main dataset
+
+names(d)
+names(d_typology)
+
+d <- d %>% mutate(Article_ID = as.character(`New ID`),
+                  Row_ID = as.numeric(as.character(numéro))) 
+
+# remove white space in ID numbers from both files
+d <- d %>% 
+  mutate(Article_ID = gsub(" ", "", Article_ID, fixed = TRUE),
+         Row_ID = gsub(" ", "", Row_ID, fixed = TRUE))
+
+d_typology <- d_typology %>% 
+  mutate(New.ID = gsub(" ", "", New.ID, fixed = TRUE),
+         `numéro` = gsub(" ", "", numéro, fixed = TRUE))
+
+d_typology <- d_typology %>% mutate(Intervention_by_composition = ifelse(Categorie =="(NH_Herb), NH_Wood, H_Herb","Classic",
+                                                       ifelse(Categorie =="(NH_Herb), H_Herb, H_Wood","Exclusive",
+                                                              ifelse(Categorie =="(NH_Herb), H_Wood","Woody exclusive",
+                                                                     ifelse(Categorie =="(NH_Herb), NH_Wood, H_Herb, H_Wood","Complex",
+                                                                            ifelse(Categorie =="(NH_Herb), NH_Wood, H_Wood","Woody classic","check"))))))
+
+test <- as.data.frame(d) %>% left_join(
+  d_typology %>% as.data.frame() %>% select(-c("farm.type","Design","Scale")), by=c("Article_ID"="New.ID","Row_ID"="numéro")) %>% filter(!(is.na(Article_ID)))
+
+check <- test %>% select(Article_ID,Row_ID,Intervention_by_composition, Intervention_reclass) 
+
+length(unique(check$Article_ID))
+length(unique(check$Row_ID))
+
+check <- check %>% filter(is.na(Intervention_by_composition)) %>% unique()
+
+write.csv(check,"check_no_intervention_found.csv",row.names=FALSE)
+
 # convert lat and long to decimal degrees
 # from either decimal degrees with a comma instead of point separation (format 42,654563°N)
 # or degrees, minutes, seconds (format 34°23'45,750W or 34°23’45,750W or 34°23′45,750W)
 # We use the measurement package to convert the second type.
 
-d <- d %>% mutate(latitude = ifelse(latitude=="NA",NA,latitude),
+d <-  d %>% mutate(latitude = ifelse(latitude=="NA",NA,latitude),
                   longitude = ifelse(longitude=="NA",NA,longitude))
 #d$latitude[i]
 #CODE[i]
@@ -124,14 +179,73 @@ for(i in 1:length(d$latitude)){
   }
 }
 
+# Fill in missing lat-longs using country centroids
+
+# get a data.frame with country centroids
+centroids <- read.csv("https://github.com/gavinr/world-countries-centroids/blob/master/dist/countries.csv") # this is not working
+centroids <- read.csv(curl("https://github.com/gavinr/world-countries-centroids/blob/master/dist/countries.csv")) # this is not working
+centroids <- read.csv("centroids.csv")  # downloaded manually
+
+centroids <- centroids %>% rename(lon_centroid = longitude,
+                                  lat_centroid = latitude) %>%
+  mutate(country_unsd = ifelse(COUNTRY =="United Kingdom", "United Kingdom of Great Britain and Northern Ireland",
+                               ifelse(COUNTRY == "Tanzania","United Republic of Tanzania",
+                                      ifelse(COUNTRY == "Vietnam","Viet Nam",
+                                                    ifelse(COUNTRY == "Bolivia", "Bolivia (Plurinational State of)",
+                                                           ifelse(COUNTRY == "United States", "United States of America",
+                                                                  ifelse(COUNTRY == "Venezuela", "Venezuela (Bolivarian Republic of)",
+                                                                         ifelse(COUNTRY == "Turkey", "Türkiye",
+                                                                                                     ifelse(COUNTRY == "Côte d'Ivoire", "Côte d’Ivoire",COUNTRY)))))))))
+d <- d %>% left_join(centroids, by=c("country"= "country_unsd")) 
+check <- d %>% filter(is.na(latitude)) %>% select(country, latitude, longitude, lat_centroid,lon_centroid)
+unique(check %>% filter(is.na(lat_centroid)) %>% select(country))
+
+d <- d %>%
+  mutate(lat_map= ifelse(is.na(latitude),lat_centroid,latitude),
+         lon_map = ifelse(is.na(longitude),lon_centroid,longitude))
+
+d$latitude<-as.numeric(d$latitude)
+d$longitude<-as.numeric(d$longitude)
+d$lat_map<-as.numeric(d$lat_map)
+d$lon_map<-as.numeric(d$lon_map)
+
+d_map <- d %>% group_by(source_id, Intervention_by_composition, lat_map,lon_map) %>%
+  filter(!is.na(Intervention_by_composition)) %>%
+  summarise(n_experiments = n())
+#filter(!(is.na(latitude))&!(is.na(longitude)))
+
+write.csv(d_map,"data_map.csv",row.names=FALSE)
+
 #### Map number of experiments per region ####
+# Note this code wasn't used to make final figure for time and aesthetic reasons 
 
-world <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf")
-#ne_country <- data.frame(country_ne=world$region) %>% unique()
-#d <- d %>% left_join(ne_country,by=("country"="country_ne"))
-#d_id_unique <- d %>% distinct(source_id,latitude,longitude, .keep_all = TRUE)
+library(installr)
+install.Rtools(check = TRUE, check_r_update = TRUE, GUI = TRUE)
+library(raster)
+library(rasterVis)
+library(rgdal)
+library(mapproj)
+library(shadowtext)
+library(forcats)
+library(rgeos)
+library(mapdata)
+library(ggspatial)
 
-# drawing the map
+# Set parameters for rmapping
+crs="+proj=moll +lon_0=0 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
+col.terrain6 <- c("#fffdd0","#EEB99F","#EAB64E","#E6E600", "#63C600","forestgreen")
+col.intervention <- c("purple")
+# import data
+tree_ag <- raster("D:/00_Data/ICRAF/tc_ag_2010_moll.tif") 
+#tree_ag_df <- as.data.frame(tree_ag, xy = T)
+tree_ag_df <- as(tree_ag,"SpatialPixelsDataFrame")
+tree_ag_df <- as.data.frame(tree_ag_df)
+colnames(tree_ag_df) <- c("value","x","y")
+
+#install.packages("rnaturalearthdata")
+#world_ne <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf")
+
+# quick world map
 plain <- theme(
   axis.text = element_blank(),
   axis.line = element_blank(),
@@ -146,32 +260,35 @@ plain <- theme(
 world <- map_data("world")
 worldplot <- ggplot() +
   geom_polygon(data = world, aes(x=long, y = lat, group = group),fill="white",colour="black") + 
-  #coord_fixed(1.3)+
-  coord_map("mollweide")+
+  coord_map("mollweide",xlim=c(-180,180))+ 
   plain
 worldplot
 
-d$latitude<-as.numeric(d$latitude)
-d$longitude<-as.numeric(d$longitude)
+# Using base mapping
+tiff(paste0(output,"Fig_1.tif"),height=4,width=7.4,units="in",res=900,compression="lzw")
 
-names(d)
-d_map <- d %>% group_by(source_id,`Intervention in our classification`,latitude,longitude) %>%
-  summarise(n_experiments = n()) %>%
-  rename("treatment" = "Intervention in our classification") %>%
-  filter(!(is.na(latitude))&!(is.na(longitude))) %>%
-  mutate(latitude = as.numeric(latitude),
-         longitude = as.numeric(longitude))
+par(mar = c(2, 1,1,1), oma=c(2,1,1,1), mfrow = c(1,1),adj=0) 
+raster::plot(tree_ag, axes=FALSE, ann=F,box=F,legend=T,legend.width=0.5, legend.shrink=0.75,horizontal=TRUE,
+             legend.args=list(text="Tree cover on agricultural land (%)",side=3,cex=0.8),
+             col=col.terrain6, xpd=TRUE)
+plot(world, add=TRUE, lwd=0.3)
+plot(map_data,add=TRUE,col=col.intervention)
+title(main="",font.main=2)
 
-world <- world %>% filter(region !="Antarctica")
+
+# Or with ggplot but world plotting takes a long time
+world <- ggplot2::map_data("world",wrap=c(-180,180))%>%filter(region != "Antarctica")
 
 g <- ggplot() + 
+  geom_raster(data=tree_ag_df, aes(x=x, y=y, fill=tc_ag_2010_moll), alpha=0.8) +
   geom_polygon(data = world,
                aes(x=long, y = lat, group = group), 
            fill="white",color = "black", 
            linewidth = 0.1) +
   #coord_sf(default_crs =sf::st_crs(4326))+
-  coord_map("mollweide")+ # azequalarea
+  coord_map("mollweide",xlim=c(-180,180))+ # azequalarea
   #coord_fixed(1.3)+
+  
   theme(panel.background = element_rect(fill = "white"),
         panel.grid = element_blank(),
         axis.line = element_blank(),
@@ -180,17 +297,39 @@ g <- ggplot() +
         axis.title = element_blank(),
         legend.position = "None") +
   geom_point(data = arrange(d_map,desc(n_experiments)), 
-             aes(x=longitude,y=latitude,colour=treatment,size=n_experiments),
+             aes(x=longitude,y=latitude,colour=Intervention_reclass,size=n_experiments),
              alpha = 0.7,
              shape=20)+
+  scale_fill_gradientn(colours= rev(terrain.colors(10)), name='Tree cover (%)')+ 
   scale_colour_viridis_d(7)+
-  scale_size_continuous(breaks=c(1,5,10,50),range=c(2,10))
+  scale_size_continuous(breaks=c(1,5,10,40,76),range=c(1,7))
 
 g
 
-library(cowplot)
-legend <- get_legend(g+theme(legend.position="bottom"))
 
+library(cowplot)
+legend <- get_legend(g+theme(legend.position="right",
+                             legend.direction="vertical",
+                             legend.background=element_blank())+
+                       guides(col=guide_legend(nrow=6,
+                                               override.aes = list(alpha = 1,size=5),
+                                               title="System",size=5,
+                                               title.theme = element_text(size = 11,face = "bold",colour = "black",angle = 0)),
+                              size=guide_legend(nrow=1,
+                                               override.aes = list(shape=21,fill="white",colour="black"),
+                                               title="Number of experiments",
+                                               title.theme = element_text(size = 11,face = "bold",colour = "black",angle = 0))))
+                           
+plot(legend)
+#g_bar_interventions <- system.file("extdata", "g_bar_interventions.png", package = "cowplot")
+
+tiff("Map of interventions.tiff",width=8,height=4,res=300,units="in")
+
+plot_grid(g, legend, labels = c('', ''), label_size = 12,ncol=2,rel_widths = c(0.75, 0.25))
+
+dev.off()
+
+ggsave("Map of interventions.tiff",width=8,height=4)
 #
 #scale_fill_gradient2(na.value="white")+
 #  scale_fill_manual(values = wes_palette("GrandBudapest1", n = 80))
