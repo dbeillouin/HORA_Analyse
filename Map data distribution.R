@@ -2,12 +2,28 @@
 ## Damien Beillouin, Sarah Jones
 ## 21 march 2023 last updated 6 March 2024
 
+required.packages <- c("raster","terra","maptools","rasterVis","dplyr","data.table", "rnaturalearth", "vegan","ncdf4","mapproj","measurements","Ternary")
+for(i in required.packages){
+  if(i %in% installed.packages()==FALSE)
+    install.packages(i)
+}
+
 ## Load Packages
+library(readxl)
+library(openxlsx)
+library(raster)
+library(magrittr)
+library(dplyr) # for data manipulation
+library(foreign) # for reading dbf files
+library(rnaturalearth)
+library(terra)
+#library(gdalUtilities)
+library(stringr)
+library(sf) 
 library(mapproj)
 library(magrittr)
 library(googlesheets4)  # Interface with Google Sheets API v4
 library(readxl)
-library(igraph)
 library(tidyverse)
 library(measurements)
 library(Ternary)
@@ -15,14 +31,19 @@ library(usethis) # for git configuration
 
 #use_git_config(user.name= "Sarah Jones",user.email = "s.jones@cgiar.org")
 
-#setwd("D:/02_Bioversity/41_HORA/R")
+data.path <- "C:/Users/sjones/OneDrive - CGIAR/00_Data_copy_20240615/"
 #setwd("C:/Users/sjones/OneDrive - CGIAR/Documents/HORA_Analyse")
 
 # import files 
-kew <- read_xlsx("./FoodPlants_SOTWPF2020.xlsx",sheet=1)
+kew <- read_xlsx(paste0(data.path,"FoodPlants_SOTWPF2020.xlsx"),sheet=1)
+
 d <- read_sheet('https://docs.google.com/spreadsheets/d/1Z5JiEmVaUu4gPKbWE-lNxg1dDTyRpCsC5CGii4EUQm8/edit#gid=0', sheet = "Articles caractérisés")
+d <- read_excel("DB_HORA_20240927.xlsx",sheet = "Articles caractérisés")
+
 d_typology <- read.csv("TAB_FINALE.HORA_20240306.csv") 
+
 list_species <- read_sheet('https://docs.google.com/spreadsheets/d/1Z5JiEmVaUu4gPKbWE-lNxg1dDTyRpCsC5CGii4EUQm8/edit#gid=390873745', sheet = "list_speciesDB")
+
 unsd <- read.csv("UNSD — Methodology.csv",header=TRUE, sep = ";") # download here: https://unstats.un.org/unsd/methodology/m49/overview/
 
 # format country names to match UNSD standard and join datasets
@@ -50,6 +71,8 @@ d <- d %>%
                                  ifelse(country =="Quebec","Canada",
                                         ifelse(country=="DR Congo","Democratic Republic of the Congo",country)))))
 
+#sort(unique(d$country))
+
 d <- d %>%   left_join(unsd,by=c("country"="Country.or.Area")) #%>%rename("Region"="Region.Name") 
 
 d <- d %>% 
@@ -66,30 +89,32 @@ d <- d %>%
          `row N treatment` = as.character(`row N treatment`),
          `row N control` = as.character(`row N control`))
 
-
 # Clean the intervention classes
+sort(unique(d$Intervention_reclass))
 d <- d %>%
   mutate(Intervention_reclass = ifelse(Intervention_reclass %in% c("Alley-cropping","Alley cropping","alley cropping","alley-cropping","Alley cropping /complex mutli-strata agroforestry","Alley-cropping, complex multi-strata systems","Alley-cropping/ complex multi-strata systems","Alley cropping, multistrata","Alley cropping/ complex multi-strata agroforestry", "alley-cropping/hedgerows"),"Alley cropping",
                                        ifelse(Intervention_reclass %in% c("multistata",  "multi strata","multistrata", "complex multi-strata-agroforestry systems", "Complex multistrata systems","multi-strata","multi-strata?","complex multi-strata agroforestry","complex multi-strata system","Complex multi-strata agroforestry"),"Multi-strata systems",
                                               ifelse(Intervention_reclass %in% c("Parkland","parkland?","parkland"),"Parkland",
                                                      ifelse(Intervention_reclass %in% c("Herdgerows","complex multi-strata-agroforestry systems/hedgerows"),"Hedgerows",
                                                             ifelse(Intervention_reclass %in% c("fallows","Alley cropping, fallows"), "Fallows",
-                                                                   ifelse(Intervention_reclass %in% c("Shaded systems","?","NA"),"Other/unknown",Intervention_reclass)))))))
+                                                                   ifelse(Intervention_reclass %in% c("Shaded systems","shaded", "?","NA"),"Other/unknown",Intervention_reclass)))))))
+
 unique(d$Intervention_reclass)
 
+#temp <- d %>% filter(Intervention_reclass == "shaded")
 
 # add typology to main dataset
 
 names(d)
 names(d_typology)
 
-d <- d %>% mutate(Article_ID = as.character(`New ID`),
-                  Row_ID = as.numeric(as.character(numéro))) 
+d <- d %>% mutate(New.ID = as.character(`New ID`),
+                  numéro = as.character(numéro))
 
 # remove white space in ID numbers from both files
 d <- d %>% 
-  mutate(Article_ID = gsub(" ", "", Article_ID, fixed = TRUE),
-         Row_ID = gsub(" ", "", Row_ID, fixed = TRUE))
+  mutate(New.ID = gsub(" ", "", New.ID, fixed = TRUE),
+         numéro = gsub(" ", "", numéro, fixed = TRUE))
 
 d_typology <- d_typology %>% 
   mutate(New.ID = gsub(" ", "", New.ID, fixed = TRUE),
@@ -101,17 +126,29 @@ d_typology <- d_typology %>% mutate(Intervention_by_composition = ifelse(Categor
                                                                      ifelse(Categorie =="(NH_Herb), NH_Wood, H_Herb, H_Wood","Complex",
                                                                             ifelse(Categorie =="(NH_Herb), NH_Wood, H_Wood","Woody classic","check"))))))
 
-test <- as.data.frame(d) %>% left_join(
-  d_typology %>% as.data.frame() %>% select(-c("farm.type","Design","Scale")), by=c("Article_ID"="New.ID","Row_ID"="numéro")) %>% filter(!(is.na(Article_ID)))
 
-check <- test %>% select(Article_ID,Row_ID,Intervention_by_composition, Intervention_reclass) 
+d <- as.data.frame(d) %>% left_join(
+  d_typology %>% as.data.frame() %>% select(-c("X", "farm.type","Design","Scale")), by=c("New.ID"="New.ID","numéro"="numéro")) %>% filter(!(is.na(New.ID)))
 
-length(unique(check$Article_ID))
-length(unique(check$Row_ID))
+d <- d %>%
+  mutate(intervention_by_complexity = case_when(Number_Total==2 & Intervention_reclass %in% c("Alley cropping","Hedgerows") ~ "Very simple",
+                                                Number_Total==2 & !(Intervention_reclass %in% c("Alley cropping","Hedgerows")) ~ "Simple",
+                                                Number_Total==3 & (Intervention_reclass %in% c("Alley cropping","Hedgerows")) ~ "Moderately complex",
+                                                Number_Total==3 & !(Intervention_reclass %in% c("Alley cropping","Hedgerows")) ~ "Complex",
+                                                Number_Total>3~"Very complex",.default="Other"))
 
-check <- check %>% filter(is.na(Intervention_by_composition)) %>% unique()
+table(d$intervention_by_complexity)
+table(d$intervention_by_complexity)
+
+check <- d %>% filter(intervention_by_complexity =="Other" ) %>% select(`New ID`,latitude,longitude, Number_Total,NB_sp,NB_strates,  `Intervention in our classification`,Intervention_reclass,Intervention_by_composition,intervention_by_complexity)
+
+check2 <- d_typology %>% filter(New.ID == "1959")
+
+check <- d %>% filter(is.na(Intervention_by_composition)) %>% unique()
 
 write.csv(check,"check_no_intervention_found.csv",row.names=FALSE)
+
+d <- d %>% filter(!is.na(NB_sp))
 
 # convert lat and long to decimal degrees
 # from either decimal degrees with a comma instead of point separation (format 42,654563°N)
@@ -196,22 +233,30 @@ centroids <- centroids %>% rename(lon_centroid = longitude,
                                                                   ifelse(COUNTRY == "Venezuela", "Venezuela (Bolivarian Republic of)",
                                                                          ifelse(COUNTRY == "Turkey", "Türkiye",
                                                                                                      ifelse(COUNTRY == "Côte d'Ivoire", "Côte d’Ivoire",COUNTRY)))))))))
+
 d <- d %>% left_join(centroids, by=c("country"= "country_unsd")) 
 check <- d %>% filter(is.na(latitude)) %>% select(country, latitude, longitude, lat_centroid,lon_centroid)
 unique(check %>% filter(is.na(lat_centroid)) %>% select(country))
 
 d <- d %>%
   mutate(lat_map= ifelse(is.na(latitude),lat_centroid,latitude),
-         lon_map = ifelse(is.na(longitude),lon_centroid,longitude))
+         lon_map = ifelse(is.na(longitude),lon_centroid,longitude)) %>%
+  mutate_at(c("latitude","longitude", "lat_map","lon_map"),as.numeric)
 
-d$latitude<-as.numeric(d$latitude)
-d$longitude<-as.numeric(d$longitude)
-d$lat_map<-as.numeric(d$lat_map)
-d$lon_map<-as.numeric(d$lon_map)
-
-d_map <- d %>% group_by(source_id, Intervention_by_composition, lat_map,lon_map) %>%
-  filter(!is.na(Intervention_by_composition)) %>%
-  summarise(n_experiments = n())
+d <- d %>%
+  mutate(intervention_by_richness = case_when(Number_Total <5 ~as.character(Number_Total),
+                                              Number_Total <11~"6-10",
+                                              Number_Total <21~"11-20",
+                                              Number_Total >20~"21-44",
+                                              .default=as.character(Number_Total)))
+d_map <- d %>% 
+  select(c(source_id, intervention_by_complexity, intervention_by_richness, Number_Total, lat_map,lon_map)) %>%
+  group_by(source_id, intervention_by_complexity, lat_map,lon_map) %>%
+  mutate(n_id_complexity = n()) %>%
+  ungroup() %>%
+  group_by(source_id, intervention_by_richness, lat_map,lon_map) %>%
+  mutate(n_id_richness = n()) %>%
+  ungroup() %>% unique()
 #filter(!(is.na(latitude))&!(is.na(longitude)))
 
 write.csv(d_map,"data_map.csv",row.names=FALSE)
@@ -223,49 +268,85 @@ library(installr)
 install.Rtools(check = TRUE, check_r_update = TRUE, GUI = TRUE)
 library(raster)
 library(rasterVis)
-library(rgdal)
 library(mapproj)
 library(shadowtext)
 library(forcats)
 library(rgeos)
 library(mapdata)
 library(ggspatial)
+library(scales)
+library(viridis)
 
-# Set parameters for rmapping
+#Set parameters for mapping
 crs="+proj=moll +lon_0=0 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
 col.terrain6 <- c("#fffdd0","#EEB99F","#EAB64E","#E6E600", "#63C600","forestgreen")
-col.intervention <- c("purple")
+col.intervention <- c(viridis_pal()(7))
+#show_col(viridis_pal()(12))
+
+unique(d_map$intervention_by_complexity)
+unique(d_map$intervention_by_richness)
+
+
 # import data
 tree_ag <- raster("D:/00_Data/ICRAF/tc_ag_2010_moll.tif") 
+tree_ag <- raster("C:/Users/sjones/OneDrive - CGIAR/00_Data_copy_20240615/Zomer/tc_ag_2010.tif")
 #tree_ag_df <- as.data.frame(tree_ag, xy = T)
-tree_ag_df <- as(tree_ag,"SpatialPixelsDataFrame")
-tree_ag_df <- as.data.frame(tree_ag_df)
-colnames(tree_ag_df) <- c("value","x","y")
+plot(tree_ag)
+tree_ag
+tree_ag_df <- as.data.frame(tree_ag, xy = TRUE, na.rm = TRUE)
 
 #install.packages("rnaturalearthdata")
-#world_ne <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf")
+world_ne <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf")
 
-# quick world map
-plain <- theme(
-  axis.text = element_blank(),
-  axis.line = element_blank(),
-  axis.ticks = element_blank(),
-  panel.border = element_blank(),
-  panel.grid = element_blank(),
-  axis.title = element_blank(),
-  panel.background = element_rect(fill = "white"),
-  plot.title = element_text(hjust = 0.5)
-)
+library(sf)
+library(tmap)
+library(rasterVis)
+library(RColorBrewer)
 
-world <- map_data("world")
-worldplot <- ggplot() +
-  geom_polygon(data = world, aes(x=long, y = lat, group = group),fill="white",colour="black") + 
-  coord_map("mollweide",xlim=c(-180,180))+ 
-  plain
-worldplot
+# covert our data to shapefile
+d_map <- d_map %>% filter(!is.na(lat_map)) %>% filter(!is.na(lon_map))
+d_map_sf <- st_as_sf(d_map,coords=c("lon_map","lat_map"))
+d_map_sf <- d_map_sf %>%
+  mutate(intervention_by_complexity = factor(intervention_by_complexity,levels= unique(intervention_by_complexity[order(Number_Total)]))) %>%
+  mutate(intervention_by_richness = factor(intervention_by_richness,levels= unique(intervention_by_richness[order(Number_Total)])))
+
+# plot with tmap (takes ages)
+tm_shape(tree_ag) + tm_raster(palette = "-RdYlBu", title = "Raster Value") +
+  tm_layout(main.title = "Raster Layer Map") +
+  tm_shape(world_ne) +  tm_borders("black") + 
+  tm_shape(d_map_sf) +  tm_dots(col = "red", size = 0.1)
+
+# plot with RasterVis (not working)
+levelplot(tree_ag, margin = FALSE, col.regions = terrain.colors(100)) +
+  layer(world_ne, col = "black")# +  # Add country boundaries
+  layer(d_map_sf, col = "red", pch = 19, cex = 1)  # Add point data
+
+# Plot with terra
+crs_wgs84 <-  "+proj=longlat +datum=WGS84 +no_defs"
+crs_moll <-  "+proj=moll +lon_0=0 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m"
+
+#tree_ag_moll <-  project(rast(tree_ag), crs_moll)
+#writeRaster(tree_ag_moll,paste0(data.path,"Zomer/tree_ag_moll.tif"))
+tree_ag_moll <- raster(paste0(data.path,"Zomer/tree_ag_moll.tif"))
+d_map_sf_moll <- project(vect(d_map_sf),crs_moll)
+st_write(d_map_sf_moll,"data_map_moll.shp")
+world_ne_moll <- project(vect(world_ne),crs_moll)
+st_write(world_ne_moll,paste0(data.path,"naturalearth/ne_moll.shp"))
+
+terra::plot(tree_ag, col = brewer.pal(5,"Greens"), main = "",axes=FALSE,box=FALSE,clip=FALSE,legend=FALSE)
+# Add country boundaries
+plot(world_ne, add = TRUE, border = "grey80",col=NA,lwd=0.5)
+# Add points
+points(d_map_sf, col = viridis(7)[factor(d_map_sf$intervention_by_richness,levels=c(unique(d_map_sf$intervention_by_richness[order(d_map_sf$Number_Total)])))], cex = c("1"=0.3,"2"=0.4,"3"=0.6,"4"=0.8,"5"=1, "6-10"=1.2,"11-20"=1.4,"21-44"=1.6)[d_map_sf$intervention_by_richness], pch = 19,alpha=0.5)
+
+legend(x=-80,y=-100, legend = sort(unique(d_map_sf$intervention_by_richness)), col =  viridis(7), pch = 19, title = "Agroforestry plant richness",ncol=4, bty="n",cex=0.8,xjust=0.5,yjust=0.5)
+
+legend(x=50,y=-50, legend = !!! ,col = brewer.pal(5,"Greens"), title = "% tree cover on agricultural land",ncol=1, bty="n",cex=0.8,xjust=0.5,yjust=0.5)
+
+dev.off()
 
 # Using base mapping
-tiff(paste0(output,"Fig_1.tif"),height=4,width=7.4,units="in",res=900,compression="lzw")
+#tiff(paste0(output,"Fig_1.tif"),height=4,width=7.4,units="in",res=900,compression="lzw")
 
 par(mar = c(2, 1,1,1), oma=c(2,1,1,1), mfrow = c(1,1),adj=0) 
 raster::plot(tree_ag, axes=FALSE, ann=F,box=F,legend=T,legend.width=0.5, legend.shrink=0.75,horizontal=TRUE,
@@ -277,6 +358,16 @@ title(main="",font.main=2)
 
 
 # Or with ggplot but world plotting takes a long time
+plain <- theme(
+  axis.text = element_blank(),
+  axis.line = element_blank(),
+  axis.ticks = element_blank(),
+  panel.border = element_blank(),
+  panel.grid = element_blank(),
+  axis.title = element_blank(),
+  panel.background = element_rect(fill = "white"),
+  plot.title = element_text(hjust = 0.5)
+)
 world <- ggplot2::map_data("world",wrap=c(-180,180))%>%filter(region != "Antarctica")
 
 g <- ggplot() + 
