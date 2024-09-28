@@ -35,10 +35,10 @@ data.path <- "C:/Users/sjones/OneDrive - CGIAR/00_Data_copy_20240615/"
 #setwd("C:/Users/sjones/OneDrive - CGIAR/Documents/HORA_Analyse")
 
 # import files 
-kew <- read_xlsx(paste0(data.path,"FoodPlants_SOTWPF2020.xlsx"),sheet=1)
+kew <- read_xlsx("FoodPlants_SOTWPF2020.xlsx",sheet=1)
 
 d <- read_sheet('https://docs.google.com/spreadsheets/d/1Z5JiEmVaUu4gPKbWE-lNxg1dDTyRpCsC5CGii4EUQm8/edit#gid=0', sheet = "Articles caractérisés")
-d <- read_excel("DB_HORA_20240927.xlsx",sheet = "Articles caractérisés")
+#d <- read_excel("DB_HORA_20240927.xlsx",sheet = "Articles caractérisés")
 
 d_typology <- read.csv("TAB_FINALE.HORA_20240306.csv") 
 
@@ -128,7 +128,9 @@ d_typology <- d_typology %>% mutate(Intervention_by_composition = ifelse(Categor
 
 
 d <- as.data.frame(d) %>% left_join(
-  d_typology %>% as.data.frame() %>% select(-c("X", "farm.type","Design","Scale")), by=c("New.ID"="New.ID","numéro"="numéro")) %>% filter(!(is.na(New.ID)))
+  d_typology %>% as.data.frame() %>% select(-c("X", "farm.type","Design","Scale")),
+  by=c("New.ID"="New.ID","numéro"="numéro")) %>% 
+  filter(!(is.na(New.ID)))
 
 d <- d %>%
   mutate(intervention_by_complexity = case_when(Number_Total==2 & Intervention_reclass %in% c("Alley cropping","Hedgerows") ~ "Very simple",
@@ -243,6 +245,8 @@ d <- d %>%
          lon_map = ifelse(is.na(longitude),lon_centroid,longitude)) %>%
   mutate_at(c("latitude","longitude", "lat_map","lon_map"),as.numeric)
 
+check <- d %>% select(latitude,longitude,lat_map, lon_map)
+
 d <- d %>%
   mutate(intervention_by_richness = case_when(Number_Total <5 ~as.character(Number_Total),
                                               Number_Total <11~"6-10",
@@ -260,22 +264,26 @@ d_map <- d %>%
 #filter(!(is.na(latitude))&!(is.na(longitude)))
 
 write.csv(d_map,"data_map.csv",row.names=FALSE)
+write.table(d_map,"data_map_.txt")
 
 #### Map number of experiments per region ####
 # Note this code wasn't used to make final figure for time and aesthetic reasons 
 
-library(installr)
-install.Rtools(check = TRUE, check_r_update = TRUE, GUI = TRUE)
+#library(installr)
+#install.Rtools(check = TRUE, check_r_update = TRUE, GUI = TRUE)
 library(raster)
 library(rasterVis)
+library(terra)
 library(mapproj)
 library(shadowtext)
 library(forcats)
-library(rgeos)
 library(mapdata)
 library(ggspatial)
 library(scales)
 library(viridis)
+library(sf)
+library(tmap)
+library(RColorBrewer)
 
 #Set parameters for mapping
 crs="+proj=moll +lon_0=0 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
@@ -288,27 +296,111 @@ unique(d_map$intervention_by_richness)
 
 
 # import data
-tree_ag <- raster("D:/00_Data/ICRAF/tc_ag_2010_moll.tif") 
+#tree_ag_moll <- raster("D:/00_Data/ICRAF/tc_ag_2010_moll.tif") 
 tree_ag <- raster("C:/Users/sjones/OneDrive - CGIAR/00_Data_copy_20240615/Zomer/tc_ag_2010.tif")
-#tree_ag_df <- as.data.frame(tree_ag, xy = T)
-plot(tree_ag)
-tree_ag
-tree_ag_df <- as.data.frame(tree_ag, xy = TRUE, na.rm = TRUE)
+#tree_ag_df <- as.data.frame(tree_ag, xy = TRUE, na.rm = TRUE)
+#plot(tree_ag)
+#tree_ag
 
 #install.packages("rnaturalearthdata")
 world_ne <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf")
 
-library(sf)
-library(tmap)
-library(rasterVis)
-library(RColorBrewer)
-
 # covert our data to shapefile
 d_map <- d_map %>% filter(!is.na(lat_map)) %>% filter(!is.na(lon_map))
-d_map_sf <- st_as_sf(d_map,coords=c("lon_map","lat_map"))
+d_map_sf <- st_as_sf(d_map,coords=c("lon_map","lat_map"),crs=crs_wgs84)
 d_map_sf <- d_map_sf %>%
-  mutate(intervention_by_complexity = factor(intervention_by_complexity,levels= unique(intervention_by_complexity[order(Number_Total)]))) %>%
-  mutate(intervention_by_richness = factor(intervention_by_richness,levels= unique(intervention_by_richness[order(Number_Total)])))
+  rename(n_id_total = Number_Total,
+         n_id_comp = n_id_complexity,
+         n_id_rich = n_id_richness,
+         int_comp = intervention_by_complexity,
+         int_rich = intervention_by_richness) %>%
+  mutate(int_comp = factor(int_comp,levels= unique(int_comp[order(n_id_total)]))) %>%
+  mutate(int_rich = factor(int_rich,levels= unique(int_rich[order(n_id_total)])))
+
+# export shapefile to use in ArcMap
+st_write(d_map_sf,"data_map_r2.shp",append=FALSE)
+
+# get proportion of experiments per region
+install.packages("exactextractr")
+library(exactextractr)
+
+continents <- world_ne %>%
+  group_by(continent) %>%
+  summarize(geometry = st_union(geometry))
+
+# Extract the valid (non-NA) and >0 areas on tree_ag raster for each continent
+# And calculate the proportion of each continent represented by these pixels
+tree_ag_non_na_areas <- exact_extract(tree_ag, continents, function(values, coverage_fraction) {
+  # Calculate the proportion of valid (non-NA) cells
+  sum((!is.na(values) & values>0) * coverage_fraction)
+})
+
+# Extract the valid (non-NA) on tree_ag rasters for the entire world (therefore representing all agricultural land)
+tree_ag_non_na_areas_world <- exact_extract(tree_ag, st_union(st_geometry(world_ne)), function(values, coverage_fraction) {
+  sum(!is.na(values) * coverage_fraction)
+})
+
+proportions_global <- tree_ag_non_na_areas / tree_ag_non_na_areas_world
+
+# Calculate the total area of each continent
+continent_areas <- st_area(continents) # returns areas in square meters by default
+# Convert to square kilometers if needed
+continent_areas_km2 <- as.numeric(continent_areas) / 1e6  # km²
+
+proportions_per_cont <- tree_ag_non_na_areas / continent_areas_km2
+
+# Add the results to the dataframe
+continents$tree_ag_proportion_per_cont <- proportions_per_cont
+continents$tree_ag_proportions_global <- proportions_global
+
+continent_prop <- continents %>% select(continent,tree_ag_proportion_per_cont,tree_ag_proportions_global) %>% as.data.frame() %>% select(-geometry)
+
+# Compute proportion of our experiments in each continent
+d_map_sf_w_continents <- st_join(d_map_sf, continents)
+
+# Count the number of points in each continent
+d_map_continent_counts <- d_map_sf_w_continents %>%
+  group_by(continent) %>%
+  summarize(count = n())
+
+d_map_continent_counts$proportion_world <- d_map_continent_counts$count / nrow(d_map_sf)
+
+print(d_map_continent_counts)
+
+continent_prop <- continent_prop %>% left_join(
+  d_map_continent_counts %>% select(continent, count, proportion_world) %>%
+    rename(hora_n = count,
+           hora_n_proportion_global = proportion_world),by="continent")
+
+#continent_prop <- continent_prop %>% select(-geometry.x,-geometry.y)
+
+write.csv(continent_prop,"data_distribution_per_continent.csv")
+
+# Bar chart showing proportions per continent in our database and compared to global tree cover in cropland dataset
+library(reshape2)
+
+continent_prop_melt <- melt(continent_prop,id.vars=c("continent"),measure.vars=c("tree_ag_proportions_global","hora_n_proportion_global")) %>%
+  mutate(value=ifelse(is.na(value),0,value)) %>%
+  filter(!(continent %in% c("Antarctica","Seven seas (open ocean)")))
+
+g <- ggplot(continent_prop_melt, aes(y=reorder(continent,value),x=value*100, fill=variable))+
+  geom_col(position=position_dodge())+
+  labs(x="%",y="")+
+  scale_fill_manual(values=c("grey50","gold"),labels=c("Share of global agricultural land with tree cover", "Share of experiments in our database"),name="")+
+  theme_minimal()+
+  theme(legend.position="top",legend.direction = "vertical",
+        legend.text = element_text(size=8))+
+  guides(fill=guide_legend(reverse=TRUE))
+g
+
+#ggsave("data_proportions_barchart.png",width=3,height=2.5,units="in")
+tiff("data_proportions_barchart.tif",width=490,height=310,units="px")
+g
+dev.off()
+
+png("data_proportions_barchart.png",width=490,height=310,units="px")
+g
+dev.off()
 
 # plot with tmap (takes ages)
 tm_shape(tree_ag) + tm_raster(palette = "-RdYlBu", title = "Raster Value") +
@@ -325,9 +417,6 @@ levelplot(tree_ag, margin = FALSE, col.regions = terrain.colors(100)) +
 crs_wgs84 <-  "+proj=longlat +datum=WGS84 +no_defs"
 crs_moll <-  "+proj=moll +lon_0=0 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m"
 
-#tree_ag_moll <-  project(rast(tree_ag), crs_moll)
-#writeRaster(tree_ag_moll,paste0(data.path,"Zomer/tree_ag_moll.tif"))
-tree_ag_moll <- raster(paste0(data.path,"Zomer/tree_ag_moll.tif"))
 d_map_sf_moll <- project(vect(d_map_sf),crs_moll)
 st_write(d_map_sf_moll,"data_map_moll.shp")
 world_ne_moll <- project(vect(world_ne),crs_moll)
