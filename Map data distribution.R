@@ -361,20 +361,47 @@ d_map_sf_w_continents <- st_join(d_map_sf, continents)
 # Count the number of points in each continent
 d_map_continent_counts <- d_map_sf_w_continents %>%
   group_by(continent) %>%
-  summarize(count = n())
+  summarize(hora_n = n())
 
-d_map_continent_counts$proportion_world <- d_map_continent_counts$count / nrow(d_map_sf)
+d_map_continent_counts$hora_n_proportion_global <- d_map_continent_counts$hora_n / nrow(d_map_sf)
 
-print(d_map_continent_counts)
-
+# Append dataset
 continent_prop <- continent_prop %>% left_join(
-  d_map_continent_counts %>% select(continent, count, proportion_world) %>%
-    rename(hora_n = count,
-           hora_n_proportion_global = proportion_world),by="continent")
-
+  d_map_continent_counts %>% select(continent, hora_n, hora_n_proportion_global),by="continent")
 #continent_prop <- continent_prop %>% select(-geometry.x,-geometry.y)
 
+# Get count and share of points per intervention in each continent
+d_map_continent_int_counts <- d_map_sf_w_continents %>%
+  group_by(continent, int_rich) %>%
+  summarize(hora_n_per_int_per_continent = n())
+
+d_map_continent_int_counts <- d_map_continent_int_counts %>%
+  left_join(
+    d_map_continent_counts %>% select(continent,hora_n), by="continent") %>%
+  mutate(hora_n_int_proportion_continent = hora_n_per_int_per_continent/hora_n)
+
+# Append dataset
+continent_prop <- continent_prop %>% left_join(
+  d_map_continent_int_counts %>% select(continent, hora_n_per_int_per_continent, hora_n_int_proportion_continent),by="continent")
+
 write.csv(continent_prop,"data_distribution_per_continent.csv")
+
+# Bar chart showing proportions per intervention per continent
+
+# CHECK and get these colours matching ArcGIS map
+col.int <- c("1"= "lightblue","2"="blue3","3"="lightgreen",
+             "4"="forestgreen","5"="darkgreen","6-10"="violet",
+             "11-20"="purple", "21-44"="purple4")
+
+g <- ggplot(continent_prop, aes(y=reorder(continent,hora_n_proportion_global),x=hora_n_int_proportion_continent, fill=int_rich))+
+  geom_col(position=position_dodge())+
+  labs(x="%",y="")+
+  scale_fill_manual(values=col.int,name="")+
+  theme_minimal()+
+  theme(legend.position="top",legend.direction = "vertical",
+        legend.text = element_text(size=8))+
+  guides(fill=guide_legend(reverse=TRUE))
+g
 
 # Bar chart showing proportions per continent in our database and compared to global tree cover in cropland dataset
 library(reshape2)
