@@ -1,6 +1,6 @@
 ## Script to map data points and make whittaker graph
 ## Damien Beillouin, Sarah Jones
-## 21 march 2023 last updated 6 March 2024
+## 21 march 2023 last updated 25 Nov 2024
 
 required.packages <- c("raster","terra","maptools","rasterVis","dplyr","data.table", "rnaturalearth", "vegan","ncdf4","mapproj","measurements","Ternary")
 for(i in required.packages){
@@ -29,8 +29,6 @@ library(measurements)
 library(Ternary)
 library(usethis) # for git configuration
 
-#use_git_config(user.name= "Sarah Jones",user.email = "s.jones@cgiar.org")
-
 data.path <- "C:/Users/sjones/OneDrive - CGIAR/00_Data_copy_20240615/"
 #setwd("C:/Users/sjones/OneDrive - CGIAR/Documents/HORA_Analyse")
 
@@ -40,7 +38,7 @@ kew <- read_xlsx("FoodPlants_SOTWPF2020.xlsx",sheet=1)
 d <- read_sheet('https://docs.google.com/spreadsheets/d/1Z5JiEmVaUu4gPKbWE-lNxg1dDTyRpCsC5CGii4EUQm8/edit#gid=0', sheet = "Articles caractérisés")
 #d <- read_excel("DB_HORA_20240927.xlsx",sheet = "Articles caractérisés")
 
-d_typology <- read.csv("TAB_FINALE.HORA_20240306.csv") 
+d_typology <- read.csv("TAB_FINALE_TRANSFERT_SARAH_20241008.csv") 
 
 list_species <- read_sheet('https://docs.google.com/spreadsheets/d/1Z5JiEmVaUu4gPKbWE-lNxg1dDTyRpCsC5CGii4EUQm8/edit#gid=390873745', sheet = "list_speciesDB")
 
@@ -73,7 +71,7 @@ d <- d %>%
 
 #sort(unique(d$country))
 
-d <- d %>%   left_join(unsd,by=c("country"="Country.or.Area")) #%>%rename("Region"="Region.Name") 
+d <- d %>%   left_join(unsd %>% select(Region.Name,Sub.region.Name, Country.or.Area, ISO.alpha3.Code),by=c("country"="Country.or.Area")) #%>%rename("Region"="Region.Name") 
 
 d <- d %>% 
   mutate(`farm size` = as.character(`farm size`),
@@ -105,11 +103,7 @@ unique(d$Intervention_reclass)
 
 # add typology to main dataset
 
-names(d)
-names(d_typology)
-
-d <- d %>% mutate(New.ID = as.character(`New ID`),
-                  numéro = as.character(numéro))
+d <- d %>% rename(New.ID = `New ID`)
 
 # remove white space in ID numbers from both files
 d <- d %>% 
@@ -120,17 +114,21 @@ d_typology <- d_typology %>%
   mutate(New.ID = gsub(" ", "", New.ID, fixed = TRUE),
          `numéro` = gsub(" ", "", numéro, fixed = TRUE))
 
-d_typology <- d_typology %>% mutate(Intervention_by_composition = ifelse(Categorie =="(NH_Herb), NH_Wood, H_Herb","Classic",
-                                                       ifelse(Categorie =="(NH_Herb), H_Herb, H_Wood","Exclusive",
-                                                              ifelse(Categorie =="(NH_Herb), H_Wood","Woody exclusive",
-                                                                     ifelse(Categorie =="(NH_Herb), NH_Wood, H_Herb, H_Wood","Complex",
-                                                                            ifelse(Categorie =="(NH_Herb), NH_Wood, H_Wood","Woody classic","check"))))))
+table(d_typology$Categorie_C, d_typology$Categorie_C2)
 
+d_typology <- d_typology %>% rename(Intervention_by_composition = Categorie_C)
 
-d <- as.data.frame(d) %>% left_join(
-  d_typology %>% as.data.frame() %>% select(-c("X", "farm.type","Design","Scale")),
-  by=c("New.ID"="New.ID","numéro"="numéro")) %>% 
-  filter(!(is.na(New.ID)))
+# correct numero column
+#d_typology <- d_typology %>% mutate(numéro = ifelse(New.ID=="2170",sub(".*\\.", "", numéro),numéro))
+
+# There are 5312 obs in the d dataset, and only 4513 in the d_typology. 
+# Use right join because d_typology has filtered out experiments with zea mays 
+d <- as.data.frame(d) %>% right_join(
+  d_typology %>% as.data.frame() %>% select(-c("X", "farm.type","Design","Scale","country", "longitude","latitude","Intervention_reclass")),
+  by=c("New.ID","numéro"))
+
+#check <- d %>% filter(is.na(New.ID))
+#check <- d %>% select(New.ID, numéro, Number_Total, Number_Woody, `species treatment`, `species control`, NB_sp, NB_spC) %>% filter(is.na(NB_sp))
 
 d <- d %>%
   mutate(intervention_by_complexity = case_when(Number_Total==2 & Intervention_reclass %in% c("Alley cropping","Hedgerows") ~ "Very simple",
@@ -140,17 +138,13 @@ d <- d %>%
                                                 Number_Total>3~"Very complex",.default="Other"))
 
 table(d$intervention_by_complexity)
-table(d$intervention_by_complexity)
 
-check <- d %>% filter(intervention_by_complexity =="Other" ) %>% select(`New ID`,latitude,longitude, Number_Total,NB_sp,NB_strates,  `Intervention in our classification`,Intervention_reclass,Intervention_by_composition,intervention_by_complexity)
+check <- d %>% filter(intervention_by_complexity =="Other" ) %>% select(New.ID,latitude,longitude, Number_Total,NB_sp,  `Intervention in our classification`,Intervention_reclass,Intervention_by_composition,intervention_by_complexity)
 
 check2 <- d_typology %>% filter(New.ID == "1959")
-
 check <- d %>% filter(is.na(Intervention_by_composition)) %>% unique()
 
-write.csv(check,"check_no_intervention_found.csv",row.names=FALSE)
-
-d <- d %>% filter(!is.na(NB_sp))
+#write.csv(unlist(check),"check_no_intervention_found.csv",row.names=FALSE)
 
 # convert lat and long to decimal degrees
 # from either decimal degrees with a comma instead of point separation (format 42,654563°N)
@@ -159,6 +153,7 @@ d <- d %>% filter(!is.na(NB_sp))
 
 d <-  d %>% mutate(latitude = ifelse(latitude=="NA",NA,latitude),
                   longitude = ifelse(longitude=="NA",NA,longitude))
+
 #d$latitude[i]
 #CODE[i]
 #grepl("'|′",d$latitude[i])
@@ -221,50 +216,68 @@ for(i in 1:length(d$latitude)){
 # Fill in missing lat-longs using country centroids
 
 # get a data.frame with country centroids
-centroids <- read.csv("https://github.com/gavinr/world-countries-centroids/blob/master/dist/countries.csv") # this is not working
-centroids <- read.csv(curl("https://github.com/gavinr/world-countries-centroids/blob/master/dist/countries.csv")) # this is not working
+#centroids <- read.csv("https://github.com/gavinr/world-countries-centroids/blob/master/dist/countries.csv") # this is not working
+#centroids <- read.csv(curl("https://github.com/gavinr/world-countries-centroids/blob/master/dist/countries.csv")) # this is not working
 centroids <- read.csv("centroids.csv")  # downloaded manually
 
 centroids <- centroids %>% rename(lon_centroid = longitude,
                                   lat_centroid = latitude) %>%
-  mutate(country_unsd = ifelse(COUNTRY =="United Kingdom", "United Kingdom of Great Britain and Northern Ireland",
-                               ifelse(COUNTRY == "Tanzania","United Republic of Tanzania",
-                                      ifelse(COUNTRY == "Vietnam","Viet Nam",
-                                                    ifelse(COUNTRY == "Bolivia", "Bolivia (Plurinational State of)",
-                                                           ifelse(COUNTRY == "United States", "United States of America",
-                                                                  ifelse(COUNTRY == "Venezuela", "Venezuela (Bolivarian Republic of)",
-                                                                         ifelse(COUNTRY == "Turkey", "Türkiye",
-                                                                                                     ifelse(COUNTRY == "Côte d'Ivoire", "Côte d’Ivoire",COUNTRY)))))))))
+  mutate(country_unsd = case_when(COUNTRY =="United Kingdom"~ "United Kingdom of Great Britain and Northern Ireland",
+                                  COUNTRY == "Tanzania"~"United Republic of Tanzania",
+                                  COUNTRY == "Vietnam"~"Viet Nam",
+                                  COUNTRY == "Bolivia"~ "Bolivia (Plurinational State of)",
+                                  COUNTRY == "United States"~"United States of America",
+                                  COUNTRY == "Venezuela"~ "Venezuela (Bolivarian Republic of)",
+                                  COUNTRY == "Turkey"~ "Türkiye",
+                                  COUNTRY == "Côte d'Ivoire"~ "Côte d’Ivoire",
+                                  COUNTRY == "Congo DRC" ~ "Democratic Republic of the Congo",
+                                  COUNTRY == "US Virgin Islands" ~ "United States Virgin Islands",
+                                  COUNTRY == "Iran" ~ "Iran (Islamic Republic of)",
+                                  COUNTRY == "Czech Republic" ~ "Czechia",
+                                  .default=COUNTRY))
 
-d <- d %>% left_join(centroids, by=c("country"= "country_unsd")) 
-check <- d %>% filter(is.na(latitude)) %>% select(country, latitude, longitude, lat_centroid,lon_centroid)
-unique(check %>% filter(is.na(lat_centroid)) %>% select(country))
+d_map <- d %>% left_join(centroids %>% rename(country_centroids = COUNTRY), by=c("country"= "country_unsd")) 
 
-d <- d %>%
-  mutate(lat_map= ifelse(is.na(latitude),lat_centroid,latitude),
-         lon_map = ifelse(is.na(longitude),lon_centroid,longitude)) %>%
-  mutate_at(c("latitude","longitude", "lat_map","lon_map"),as.numeric)
+#check <- d_map %>% filter(is.na(latitude)) %>% select(country, latitude, longitude, lat_centroid,lon_centroid) %>% unique()
+#check <- d_map %>% filter(is.na(lon_centroid)) %>% select(country, latitude, longitude, lat_centroid,lon_centroid) %>% unique()
+#unique(check %>% filter(is.na(lat_centroid)) %>% select(country))
+#sort(unique(centroids$COUNTRY))
 
-check <- d %>% select(latitude,longitude,lat_map, lon_map)
+d_map <- d_map %>%
+  #mutate(latitude = unlist(latitude)) %>%
+  mutate(lat_map= ifelse(is.na(latitude) | latitude %in% c("A"),lat_centroid,latitude),
+         lon_map = ifelse(is.na(longitude)| longitude %in% c("A"),lon_centroid,longitude)) %>%
+  mutate_at(c("lat_map","lon_map"),as.numeric)
 
-d <- d %>%
+#check <- d_map %>% select(New.ID, latitude,longitude,lat_map, lon_map) %>% filter(lat_map > 90 | is.na(lat_map) | is.na (lon_map)) %>% unique()
+
+#write.csv(check,"data_missing_latlon.csv",row.names=FALSE)
+#names(d_map)
+d_map <- d_map %>%
   mutate(intervention_by_richness = case_when(Number_Total <5 ~as.character(Number_Total),
                                               Number_Total <11~"6-10",
                                               Number_Total <21~"11-20",
                                               Number_Total >20~"21-44",
                                               .default=as.character(Number_Total)))
-d_map <- d %>% 
-  select(c(source_id, intervention_by_complexity, intervention_by_richness, Number_Total, lat_map,lon_map)) %>%
-  group_by(source_id, intervention_by_complexity, lat_map,lon_map) %>%
+d_map <- d_map %>% 
+  select(c(New.ID,country,location, intervention_by_complexity, intervention_by_richness, Intervention_by_composition, Number_Total, lat_map,lon_map)) %>%
+  group_by(New.ID, lat_map, lon_map) %>%
+  mutate(n_experiments = n()) %>% 
+  ungroup() %>%
+  group_by(New.ID,intervention_by_complexity, lat_map,lon_map) %>%
   mutate(n_id_complexity = n()) %>%
   ungroup() %>%
-  group_by(source_id, intervention_by_richness, lat_map,lon_map) %>%
+  group_by(New.ID,intervention_by_richness, lat_map,lon_map) %>%
   mutate(n_id_richness = n()) %>%
+  ungroup() %>% 
+  group_by(New.ID,Intervention_by_composition, lat_map,lon_map) %>%
+  mutate(n_id_composition = n()) %>%
   ungroup() %>% unique()
-#filter(!(is.na(latitude))&!(is.na(longitude)))
+
+#d_map %>% filter(is.na(lat_map)) %>% select(country) %>% unique()
 
 write.csv(d_map,"data_map.csv",row.names=FALSE)
-write.table(d_map,"data_map_.txt")
+write.table(d_map,"data_map.txt")
 
 #### Map number of experiments per region ####
 # Note this code wasn't used to make final figure for time and aesthetic reasons 
@@ -286,6 +299,8 @@ library(tmap)
 library(RColorBrewer)
 
 #Set parameters for mapping
+crs_wgs84 <-  "+proj=longlat +datum=WGS84 +no_defs"
+crs_moll <-  "+proj=moll +lon_0=0 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m"
 crs="+proj=moll +lon_0=0 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
 col.terrain6 <- c("#fffdd0","#EEB99F","#EAB64E","#E6E600", "#63C600","forestgreen")
 col.intervention <- c(viridis_pal()(7))
@@ -293,39 +308,64 @@ col.intervention <- c(viridis_pal()(7))
 
 unique(d_map$intervention_by_complexity)
 unique(d_map$intervention_by_richness)
-
+unique(d_map$Intervention_by_composition)
+hist(d_map$Number_Total)
 
 # import data
 #tree_ag_moll <- raster("D:/00_Data/ICRAF/tc_ag_2010_moll.tif") 
-tree_ag <- raster("C:/Users/sjones/OneDrive - CGIAR/00_Data_copy_20240615/Zomer/tc_ag_2010.tif")
-#tree_ag_df <- as.data.frame(tree_ag, xy = TRUE, na.rm = TRUE)
+#tree_ag <- raster("C:/Users/sjones/OneDrive - CGIAR/00_Data_copy_20240615/Zomer/tc_ag_2010.tif")
+#tree_ag <- rast("C:/Users/sjones/OneDrive - CGIAR/00_Data_copy_20240615/Chapman/Chapman_crop_mosaic_1km_gte10.tif")
+#tree_ag_moll <- project(tree_ag, crs_moll)
 #plot(tree_ag)
-#tree_ag
+#plot(tree_ag_moll)
+#tree_ag_moll[tree_ag_moll == 0] <- NA
+#writeRaster(tree_ag_moll,"C:/Users/sjones/OneDrive - CGIAR/00_Data_copy_20240615/Chapman/Chapman_crop_mosaic_1km_gte10_moll.tif")
+#tree_ag <- tree_ag_moll
+tree_ag <- rast("C:/Users/sjones/OneDrive - CGIAR/00_Data_copy_20240615/Chapman/Chapman_crop_mosaic_1km_gte10_moll.tif")
+
+#lulc <- rast("C:/Users/sjones/OneDrive - CGIAR/00_Data_copy_20240615/ESA/esa_2020_cropland.tif")
+#plot(lulc_moll)
+#lulc_moll <- terra::project(lulc, crs_moll)
+#writeRaster(lulc_moll,"C:/Users/sjones/OneDrive - CGIAR/00_Data_copy_20240615/ESA/esa_2020_cropland_moll.tif")
+#lulc <- lulc_moll
+#lulc <- rast("C:/Users/sjones/OneDrive - CGIAR/00_Data_copy_20240615/ESA/esa_2020_cropland_moll.tif")
+lulc <- rast("C:/Users/sjones/OneDrive - CGIAR/00_Data_copy_20240615/ESA/esa_2020_cropland_moll_arc_1km.tif")
+
+ecoreg <- read_sf("C:/Users/sjones/OneDrive - CGIAR/00_Data_copy_20240615/Ecoregions/Ecoregions2017_biome.shp")
+ecoreg <- st_transform(ecoreg, crs(tree_ag))
 
 #install.packages("rnaturalearthdata")
 world_ne <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf")
-
+world_ne <- st_transform(world_ne, crs(tree_ag))
+  
 # covert our data to shapefile
-d_map <- d_map %>% filter(!is.na(lat_map)) %>% filter(!is.na(lon_map))
+#d_map <- d_map %>% filter(!is.na(lat_map)) %>% filter(!is.na(lon_map))
 d_map_sf <- st_as_sf(d_map,coords=c("lon_map","lat_map"),crs=crs_wgs84)
 d_map_sf <- d_map_sf %>%
-  rename(n_id_total = Number_Total,
+  rename(n_rich = Number_Total,
          n_id_comp = n_id_complexity,
          n_id_rich = n_id_richness,
          int_comp = intervention_by_complexity,
-         int_rich = intervention_by_richness) %>%
-  mutate(int_comp = factor(int_comp,levels= unique(int_comp[order(n_id_total)]))) %>%
-  mutate(int_rich = factor(int_rich,levels= unique(int_rich[order(n_id_total)])))
+         int_rich = intervention_by_richness,
+         int_cton = Intervention_by_composition) %>%
+  mutate(int_comp = factor(int_comp,levels= unique(int_comp[order(n_rich)]))) %>%
+  mutate(int_rich = factor(int_rich,levels= unique(int_rich[order(n_rich)]))) %>%
+  mutate(int_cton = factor(int_cton,levels= unique(int_cton[order(n_rich)])))
 
+plot(d_map_sf)
 # export shapefile to use in ArcMap
-st_write(d_map_sf,"data_map_r2.shp",append=FALSE)
+st_write(d_map_sf,"data_map.shp",append=FALSE)
 
 # get proportion of experiments per region
-install.packages("exactextractr")
+#install.packages("exactextractr")
 library(exactextractr)
 
 continents <- world_ne %>%
-  group_by(continent) %>%
+  group_by(region_un) %>%
+  summarize(geometry = st_union(geometry))
+
+countries <- world_ne %>%
+  group_by(geounit) %>%
   summarize(geometry = st_union(geometry))
 
 # Extract the valid (non-NA) and >0 areas on tree_ag raster for each continent
@@ -335,12 +375,19 @@ tree_ag_non_na_areas <- exact_extract(tree_ag, continents, function(values, cove
   sum((!is.na(values) & values>0) * coverage_fraction)
 })
 
-# Extract the valid (non-NA) on tree_ag rasters for the entire world (therefore representing all agricultural land)
-tree_ag_non_na_areas_world <- exact_extract(tree_ag, st_union(st_geometry(world_ne)), function(values, coverage_fraction) {
-  sum(!is.na(values) * coverage_fraction)
+
+# Extract the valid (non-NA) areas on tree_ag rasters for the entire world (therefore representing all agricultural land) - use this for Zomer data
+agland_areas <- exact_extract(tree_ag, st_union(st_geometry(world_ne)), function(values, coverage_fraction) {
+  sum(!is.na(values)  * coverage_fraction)
 })
 
-proportions_global <- tree_ag_non_na_areas / tree_ag_non_na_areas_world
+# Extract the cropland areas for each continent
+agland_areas <- exact_extract(lulc, continents, function(values, coverage_fraction) {
+  # Calculate the proportion of valid (non-NA) cells
+  sum((!is.na(values) & values>0) * coverage_fraction)#*res(lulc)[1]*res(lulc)[2]
+})
+
+proportions_global <- tree_ag_non_na_areas / agland_areas
 
 # Calculate the total area of each continent
 continent_areas <- st_area(continents) # returns areas in square meters by default
@@ -353,38 +400,73 @@ proportions_per_cont <- tree_ag_non_na_areas / continent_areas_km2
 continents$tree_ag_proportion_per_cont <- proportions_per_cont
 continents$tree_ag_proportions_global <- proportions_global
 
-continent_prop <- continents %>% select(continent,tree_ag_proportion_per_cont,tree_ag_proportions_global) %>% as.data.frame() %>% select(-geometry)
-
 # Compute proportion of our experiments in each continent
-d_map_sf_w_continents <- st_join(d_map_sf, continents)
+d_map_sf <- st_transform(d_map_sf, crs(continents))
+d_map_sf_w_continents <- st_join(d_map_sf, continents) %>%
+  mutate(continent = ifelse(country == "Italy","Europe",
+                            ifelse(country == "Canada","North America",
+                                   ifelse(country =="Brazil","South America",continent)))) 
 
 # Count the number of points in each continent
-d_map_continent_counts <- d_map_sf_w_continents %>%
-  group_by(continent) %>%
-  summarize(hora_n = n())
+d_map_continent_counts <- data.frame(d_map_sf_w_continents)  %>%
+  select(New.ID, continent, geometry, n_experiments) %>% unique() %>%
+  group_by(continent)  %>%
+  summarize(n_experiments_cont = sum(n_experiments))
 
-d_map_continent_counts$hora_n_proportion_global <- d_map_continent_counts$hora_n / nrow(d_map_sf)
+d_map_continent_counts$n_experiments_cont_proportion_global <- d_map_continent_counts$n_experiments_cont / nrow(d)
 
 # Append dataset
+continent_prop <- continents %>% select(continent,tree_ag_proportion_per_cont) %>% as.data.frame() %>% select(-geometry)
+continent_prop <- continents %>% select(continent,tree_ag_proportion_per_cont,tree_ag_proportions_global) %>% as.data.frame() %>% select(-geometry)
 continent_prop <- continent_prop %>% left_join(
-  d_map_continent_counts %>% select(continent, hora_n, hora_n_proportion_global),by="continent")
-#continent_prop <- continent_prop %>% select(-geometry.x,-geometry.y)
+  d_map_continent_counts %>% select(continent, n_experiments_cont, n_experiments_cont_proportion_global),by="continent")
+#continent_prop <- continent_prop %>% select(-geometry)
 
 # Get count and share of points per intervention in each continent
-d_map_continent_int_counts <- d_map_sf_w_continents %>%
-  group_by(continent, int_rich) %>%
-  summarize(hora_n_per_int_per_continent = n())
+d_map_continent_int_counts <- data.frame(d_map_sf_w_continents)  %>%
+  select(New.ID, continent, geometry, int_cton, n_id_composition) %>% unique() %>%
+  group_by(continent, int_cton) %>%
+  summarize(hora_n_per_int_cton_per_continent = sum(n_id_composition))
 
-d_map_continent_int_counts <- d_map_continent_int_counts %>%
-  left_join(
-    d_map_continent_counts %>% select(continent,hora_n), by="continent") %>%
-  mutate(hora_n_int_proportion_continent = hora_n_per_int_per_continent/hora_n)
+d_map_continent_int_counts <- left_join(d_map_continent_int_counts,
+    data.frame(d_map_continent_counts)) %>%
+  mutate(hora_n_int_cton_proportion_continent = hora_n_per_int_cton_per_continent/n_experiments_cont)
 
 # Append dataset
-continent_prop <- continent_prop %>% left_join(
-  d_map_continent_int_counts %>% select(continent, hora_n_per_int_per_continent, hora_n_int_proportion_continent),by="continent")
+continent_prop <- continent_prop %>% left_join(data.frame(d_map_continent_int_counts) %>% select(continent,int_cton, hora_n_per_int_cton_per_continent, hora_n_int_cton_proportion_continent), by="continent") 
+
+names(continent_prop)
+continent_prop <- continent_prop %>% 
+  mutate_at(vars(n_experiments_cont, n_experiments_cont_proportion_global,hora_n_per_int_cton_per_continent, hora_n_int_cton_proportion_continent), ~ifelse(is.na(.),0,.))
+#glimpse(continent_prop)
+
+sum(continent_prop$hora_n_per_int_cton_per_continent, na.rm=TRUE)
 
 write.csv(continent_prop,"data_distribution_per_continent.csv")
+
+
+##### Make figures #######
+
+# Scatter plot showing % land with trees and % experiments per continent
+g_scatter <- ggplot(continent_prop %>% filter(!continent %in% c("Seven seas (open ocean)","Antarctica")), aes(x=n_experiments_cont_proportion_global*100, y=tree_ag_proportions_global*100, colour=continent, size=n_experiments_cont))+
+  geom_point()+
+  geom_text(aes(label=continent,colour=continent),size=3,nudge_x=3.5, nudge_y=-1.8,show.legend=FALSE)+
+  coord_cartesian(expand=c(0))+
+  labs(x="Share of experiments per region (%)", 
+       y="Share of cropland with tree cover (%)")+
+  scale_size_continuous(breaks=c(50,500,1500), range=c(2,8),"Number of experiments per region")+
+  scale_color_manual(values=terrain.colors(7),"Region")+
+  scale_x_continuous(limits=c(0,45))+
+  scale_y_continuous(limits=c(0,50))+
+  theme_classic()+
+  theme(legend.text = element_text(size=10),
+        legend.position="top",legend.direction = "horizontal",
+        legend.title = element_text(size=10,face="bold",hjust=0.5),
+        legend.title.position="top")+
+  guides(size=guide_legend(override.aes=list(colour="grey80")),
+         colour="none")
+
+g_scatter
 
 # Bar chart showing proportions per intervention per continent
 
@@ -393,153 +475,181 @@ col.int <- c("1"= "lightblue","2"="blue3","3"="lightgreen",
              "4"="forestgreen","5"="darkgreen","6-10"="violet",
              "11-20"="purple", "21-44"="purple4")
 
-g <- ggplot(continent_prop, aes(y=reorder(continent,hora_n_proportion_global),x=hora_n_int_proportion_continent, fill=int_rich))+
-  geom_col(position=position_dodge())+
-  labs(x="%",y="")+
+sort(unique(d_map$Intervention_by_composition))
+
+col.int <- c("(HNE), HE, WE" = "purple4" , "(HNE), WE"="lightblue", "(HNE), WNE, WE"="lightgreen",   "WNE" ="forestgreen", "HNE, WNE" ="violet", "HE"  ="purple2", "Autre"= "steelblue")
+
+g_prop <- ggplot(continent_prop %>% filter(!continent %in% c("Seven seas (open ocean)","Antarctica")), aes(y=reorder(continent,desc(continent)),x=hora_n_int_cton_proportion_continent*100, fill=int_cton))+
+  geom_col(position=position_stack())+
+  labs(x="Proportion of studies (%)",y="")+
   scale_fill_manual(values=col.int,name="")+
-  theme_minimal()+
-  theme(legend.position="top",legend.direction = "vertical",
-        legend.text = element_text(size=8))+
+  theme_classic()+
+  theme(legend.position="top",legend.direction = "horizontal",
+        legend.text = element_text(size=8),
+        legend.title = element_text(size=10))+
   guides(fill=guide_legend(reverse=TRUE))
-g
-
-# Bar chart showing proportions per continent in our database and compared to global tree cover in cropland dataset
-library(reshape2)
-
-continent_prop_melt <- melt(continent_prop,id.vars=c("continent"),measure.vars=c("tree_ag_proportions_global","hora_n_proportion_global")) %>%
-  mutate(value=ifelse(is.na(value),0,value)) %>%
-  filter(!(continent %in% c("Antarctica","Seven seas (open ocean)")))
-
-g <- ggplot(continent_prop_melt, aes(y=reorder(continent,value),x=value*100, fill=variable))+
-  geom_col(position=position_dodge())+
-  labs(x="%",y="")+
-  scale_fill_manual(values=c("grey50","gold"),labels=c("Share of global agricultural land with tree cover", "Share of experiments in our database"),name="")+
-  theme_minimal()+
-  theme(legend.position="top",legend.direction = "vertical",
-        legend.text = element_text(size=8))+
-  guides(fill=guide_legend(reverse=TRUE))
-g
+g_prop
 
 #ggsave("data_proportions_barchart.png",width=3,height=2.5,units="in")
-tiff("data_proportions_barchart.tif",width=490,height=310,units="px")
+tiff("data_proportions_int_region_barchart.tif",width=350,height=310,units="px")
+g_prop
+dev.off()
+
+png("data_proportions_int_region_barchart.png",width=490,height=310,units="px")
 g
 dev.off()
 
-png("data_proportions_barchart.png",width=490,height=310,units="px")
-g
-dev.off()
+# Make map
+library(reshape2)
 
-# plot with tmap (takes ages)
-tm_shape(tree_ag) + tm_raster(palette = "-RdYlBu", title = "Raster Value") +
-  tm_layout(main.title = "Raster Layer Map") +
-  tm_shape(world_ne) +  tm_borders("black") + 
-  tm_shape(d_map_sf) +  tm_dots(col = "red", size = 0.1)
+# Plot with ggplot but raster plotting takes a long time
 
-# plot with RasterVis (not working)
-levelplot(tree_ag, margin = FALSE, col.regions = terrain.colors(100)) +
-  layer(world_ne, col = "black")# +  # Add country boundaries
-  layer(d_map_sf, col = "red", pch = 19, cex = 1)  # Add point data
+#tree_ag_df <- as.data.frame(tree_ag, xy = TRUE) # memory limit exceeded
 
-# Plot with terra
-crs_wgs84 <-  "+proj=longlat +datum=WGS84 +no_defs"
-crs_moll <-  "+proj=moll +lon_0=0 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m"
+library(stars)
+g_map <- ggplot() + 
+  #geom_raster(data=tree_ag_df, aes(x=x, y=y, fill=value), alpha=0.8) +
+  #geom_stars(data=tree_ag, downsample = 10) +
+  geom_sf(data = world_ne %>% filter(!continent %in% c("Antarctica")),fill="white")+
+  geom_sf(data = d_map_sf,
+           aes(colour=int_cton, size=n_id_composition),alpha=0.7, 
+           linewidth = 0.1)+ #size=n_experiments), 
 
-d_map_sf_moll <- project(vect(d_map_sf),crs_moll)
-st_write(d_map_sf_moll,"data_map_moll.shp")
-world_ne_moll <- project(vect(world_ne),crs_moll)
-st_write(world_ne_moll,paste0(data.path,"naturalearth/ne_moll.shp"))
-
-terra::plot(tree_ag, col = brewer.pal(5,"Greens"), main = "",axes=FALSE,box=FALSE,clip=FALSE,legend=FALSE)
-# Add country boundaries
-plot(world_ne, add = TRUE, border = "grey80",col=NA,lwd=0.5)
-# Add points
-points(d_map_sf, col = viridis(7)[factor(d_map_sf$intervention_by_richness,levels=c(unique(d_map_sf$intervention_by_richness[order(d_map_sf$Number_Total)])))], cex = c("1"=0.3,"2"=0.4,"3"=0.6,"4"=0.8,"5"=1, "6-10"=1.2,"11-20"=1.4,"21-44"=1.6)[d_map_sf$intervention_by_richness], pch = 19,alpha=0.5)
-
-legend(x=-80,y=-100, legend = sort(unique(d_map_sf$intervention_by_richness)), col =  viridis(7), pch = 19, title = "Agroforestry plant richness",ncol=4, bty="n",cex=0.8,xjust=0.5,yjust=0.5)
-
-legend(x=50,y=-50, legend = !!! ,col = brewer.pal(5,"Greens"), title = "% tree cover on agricultural land",ncol=1, bty="n",cex=0.8,xjust=0.5,yjust=0.5)
-
-dev.off()
-
-# Using base mapping
-#tiff(paste0(output,"Fig_1.tif"),height=4,width=7.4,units="in",res=900,compression="lzw")
-
-par(mar = c(2, 1,1,1), oma=c(2,1,1,1), mfrow = c(1,1),adj=0) 
-raster::plot(tree_ag, axes=FALSE, ann=F,box=F,legend=T,legend.width=0.5, legend.shrink=0.75,horizontal=TRUE,
-             legend.args=list(text="Tree cover on agricultural land (%)",side=3,cex=0.8),
-             col=col.terrain6, xpd=TRUE)
-plot(world, add=TRUE, lwd=0.3)
-plot(map_data,add=TRUE,col=col.intervention)
-title(main="",font.main=2)
-
-
-# Or with ggplot but world plotting takes a long time
-plain <- theme(
-  axis.text = element_blank(),
-  axis.line = element_blank(),
-  axis.ticks = element_blank(),
-  panel.border = element_blank(),
-  panel.grid = element_blank(),
-  axis.title = element_blank(),
-  panel.background = element_rect(fill = "white"),
-  plot.title = element_text(hjust = 0.5)
-)
-world <- ggplot2::map_data("world",wrap=c(-180,180))%>%filter(region != "Antarctica")
-
-g <- ggplot() + 
-  geom_raster(data=tree_ag_df, aes(x=x, y=y, fill=tc_ag_2010_moll), alpha=0.8) +
-  geom_polygon(data = world,
-               aes(x=long, y = lat, group = group), 
-           fill="white",color = "black", 
-           linewidth = 0.1) +
-  #coord_sf(default_crs =sf::st_crs(4326))+
-  coord_map("mollweide",xlim=c(-180,180))+ # azequalarea
+  coord_sf(default_crs =sf::st_crs(4326))+
+  #coord_map("mollweide",xlim=c(-180,180)) # azequalarea
   #coord_fixed(1.3)+
-  
   theme(panel.background = element_rect(fill = "white"),
         panel.grid = element_blank(),
         axis.line = element_blank(),
         axis.ticks = element_blank(),
         axis.text = element_blank(),
         axis.title = element_blank(),
-        legend.position = "None") +
-  geom_point(data = arrange(d_map,desc(n_experiments)), 
-             aes(x=longitude,y=latitude,colour=Intervention_reclass,size=n_experiments),
-             alpha = 0.7,
-             shape=20)+
-  scale_fill_gradientn(colours= rev(terrain.colors(10)), name='Tree cover (%)')+ 
-  scale_colour_viridis_d(7)+
-  scale_size_continuous(breaks=c(1,5,10,40,76),range=c(1,7))
+        legend.position = "none") +
+  #scale_fill_gradientn(colours= rev(terrain.colors(10)), name='Tree cover (%)')+ 
+  scale_colour_manual(values=col.int)+
+  scale_size_continuous(range=c(1,7)) # breaks=c(1,5,10,40,76),
+g_map
 
-g
-
+#ggsave("Map of interventions.tiff",width=8,height=4)
 
 library(cowplot)
-legend <- get_legend(g+theme(legend.position="right",
+legend <- get_legend(g_map+theme(legend.position="right",
                              legend.direction="vertical",
                              legend.background=element_blank())+
-                       guides(col=guide_legend(nrow=6,
-                                               override.aes = list(alpha = 1,size=5),
-                                               title="System",size=5,
-                                               title.theme = element_text(size = 11,face = "bold",colour = "black",angle = 0)),
-                              size=guide_legend(nrow=1,
+                       #guides(col=guide_legend(nrow=7,override.aes = list(alpha = 1,size=5),title="Agroforestry system",size=5,title.theme = element_text(size = 10,face = "bold",colour = "black",angle = 0)),
+                              guides(col="none",
+                              size=guide_legend(nrow=5,
                                                override.aes = list(shape=21,fill="white",colour="black"),
                                                title="Number of experiments",
-                                               title.theme = element_text(size = 11,face = "bold",colour = "black",angle = 0))))
+                                               title.theme = element_text(size = 10,face = "bold",colour = "black",angle = 0))))
                            
-plot(legend)
-#g_bar_interventions <- system.file("extdata", "g_bar_interventions.png", package = "cowplot")
+p1 <- plot_grid(g_map,legend, labels = c('A', ''), label_size = 12, ncol=2,rel_widths = c(0.8, 0.2))
+p2 <- plot_grid(g_prop,g_scatter, labels = c("B","C"),label_size = 12, ncol= 2, rel_widths = c(0.5,0.5))
+p2
 
-tiff("Map of interventions.tiff",width=8,height=4,res=300,units="in")
-
-plot_grid(g, legend, labels = c('', ''), label_size = 12,ncol=2,rel_widths = c(0.75, 0.25))
-
+tiff("Map of interventions.tiff",width=8,height=5,res=300,units="in")
+p1
 dev.off()
 
-ggsave("Map of interventions.tiff",width=8,height=4)
-#
-#scale_fill_gradient2(na.value="white")+
-#  scale_fill_manual(values = wes_palette("GrandBudapest1", n = 80))
+tiff("Map of charts.tiff",width=8,height=4,res=300,units="in")
+p2
+dev.off()
+
+tiff("Map of interventions and charts below.tiff",width=8,height=8,res=300,units="in")
+plot_grid(p1,p2,labels=c('',''), label_size=12, ncol=1, rel_heights=c(0.6,0.4))
+dev.off()
+
+png("Map of interventions.png",width=8,height=5,res=300,units="in")
+p1
+dev.off()
+
+png("Map of charts.png",width=8,height=4,res=300,units="in")
+p2
+dev.off()
+
+png("Map of interventions and charts below.png",width=8,height=8,res=300,units="in")
+plot_grid(p1,p2,labels=c('',''), label_size=12, ncol=1, rel_heights=c(0.6,0.4))
+dev.off()
+
+
+# Descriptive stats for the paper
+addmargins(table(d$Region.Name, d$Intervention_by_composition))
+addmargins(table(d$Region.Name))
+check <- data.frame(addmargins(table(d$Region.Name))) %>%
+  mutate(Freq_prop = Freq/nrow(d)*100)
+check <- data.frame(addmargins(table(d[which(d$Region.Name =="Americas"),]$country))) %>%
+  mutate(Freq_prop = Freq/nrow(d)*100) %>%
+  mutate(Freq_prop_local = Freq/max(Freq)*100)
+sort(unique(d$Sub.region.Name))
+check <- data.frame(addmargins(table(d[which(d$Sub.region.Name =="Northern America"),]$country))) %>%
+  mutate(Freq_prop = Freq/nrow(d)*100) %>%
+  mutate(Freq_prop_local = Freq/max(Freq)*100)
+check <- data.frame(addmargins(table(d[which(d$Sub.region.Name =="Latin America and the Caribbean"),]$country))) %>%
+  mutate(Freq_prop = Freq/nrow(d)*100) %>%
+  mutate(Freq_prop_local = Freq/max(Freq)*100)
+
+check <- continent_prop %>% select(continent, tree_ag_proportions_global, n_experiments_cont_proportion_global)
+cor.test(check$tree_ag_proportions_global, check$n_experiments_cont_proportion_global)
+#r = 0.35,  p = 0.041, at regional level
+
+#### Proportion per biome ####
+
+# Spatial join to add ecoregion information to experiments
+d_map_w_biomes <- st_join(d_map_sf_w_continents, ecoreg, join = st_intersects)
+
+biome_prop <- d_map_w_biomes %>%
+  select(New.ID,geometry, n_experiments, BIOME_NAME) %>% unique() %>%
+  group_by(BIOME_NAME) %>%
+  summarise(n_per_biome = sum(n_experiments))
+
+sum(biome_prop$n_per_biome)
+
+biome_prop <- biome_prop %>%
+  mutate(Freq = n_per_biome/sum(biome_prop$n_per_biome)*100) 
+
+# Calculate share of cropland with trees, per biome
+tree_ag_non_na_areas_biomes <- exact_extract(tree_ag, ecoreg, function(values, coverage_fraction) {
+  # Calculate the proportion of valid (non-NA) cells
+  sum((!is.na(values) & values>0) * coverage_fraction)
+})
+
+agland_areas_biomes <- exact_extract(lulc, ecoreg, function(values, coverage_fraction) {
+  # Calculate the proportion of valid (non-NA) cells
+  sum((!is.na(values) & values>0) * coverage_fraction)#*res(lulc)[1]*res(lulc)[2]
+})
+
+#proportions_global <- tree_ag_non_na_areas_biomes / agland_areas_biomes
+
+# Calculate the total area of each biome
+biome_areas <- st_area(ecoreg) # returns areas in square meters by default
+# Convert to square kilometers if needed
+biome_areas_km2 <- as.numeric(biome_areas) / 1e6  # km²
+
+proportions_per_biome <- tree_ag_non_na_areas_biomes/ biome_areas
+
+
+#### Proportion per country to run correlation analysis ####
+# This killed my computer and needs to be run on the server
+
+tree_ag_non_na_areas_countries <- exact_extract(tree_ag, countries, function(values, coverage_fraction) {
+  # Calculate the proportion of valid (non-NA) cells
+  sum((!is.na(values) & values>0) * coverage_fraction)
+})
+
+agland_areas_countries <- exact_extract(lulc, countries, function(values, coverage_fraction) {
+  # Calculate the proportion of valid (non-NA) cells
+  sum((!is.na(values) & values>0) * coverage_fraction)#*res(lulc)[1]*res(lulc)[2]
+})
+
+proportions_global <- tree_ag_non_na_areas / agland_areas
+
+# Calculate the total area of each country
+countries_areas <- st_area(countries) # returns areas in square meters by default
+# Convert to square kilometers if needed
+countries_areas_km2 <- as.numeric(countries_areas) / 1e6  # km²
+
+proportions_per_country <- tree_ag_non_na_areas_countries / countries_areas
+
 
 ### Whitetaker - this part needs updating ####
 
@@ -658,3 +768,34 @@ setdiff(world$geounit,occ_geounit$country)
 
 T0world2<-merge(world,occ_geounit, all=TRUE)
 world2 <- T0world2 #%>% select(geounit,no_articles)
+
+
+# plot with tmap (takes ages)
+tm_shape(tree_ag) + tm_raster(palette = "-RdYlBu", title = "Raster Value") +
+  tm_layout(main.title = "Raster Layer Map") +
+  tm_shape(world_ne) +  tm_borders("black") + 
+  tm_shape(d_map_sf) +  tm_dots(col = "red", size = 0.1)
+
+# plot with RasterVis (not working)
+levelplot(tree_ag, margin = FALSE, col.regions = terrain.colors(100)) +
+  layer(world_ne, col = "black")# +  # Add country boundaries
+layer(d_map_sf, col = "red", pch = 19, cex = 1)  # Add point data
+
+# Plot with terra
+
+d_map_sf_moll <- project(vect(d_map_sf),crs_moll)
+st_write(d_map_sf_moll,"data_map_moll.shp")
+world_ne_moll <- project(vect(world_ne),crs_moll)
+st_write(world_ne_moll,paste0(data.path,"naturalearth/ne_moll.shp"))
+
+terra::plot(tree_ag, col = brewer.pal(5,"Greens"), main = "",axes=FALSE,box=FALSE,clip=FALSE,legend=FALSE)
+# Add country boundaries
+plot(world_ne, add = TRUE, border = "grey80",col=NA,lwd=0.5)
+# Add points
+points(d_map_sf, col = viridis(7)[factor(d_map_sf$intervention_by_richness,levels=c(unique(d_map_sf$intervention_by_richness[order(d_map_sf$Number_Total)])))], cex = c("1"=0.3,"2"=0.4,"3"=0.6,"4"=0.8,"5"=1, "6-10"=1.2,"11-20"=1.4,"21-44"=1.6)[d_map_sf$intervention_by_richness], pch = 19,alpha=0.5)
+
+legend(x=-80,y=-100, legend = sort(unique(d_map_sf$intervention_by_richness)), col =  viridis(7), pch = 19, title = "Agroforestry plant richness",ncol=4, bty="n",cex=0.8,xjust=0.5,yjust=0.5)
+
+legend(x=50,y=-50, legend = !!! ,col = brewer.pal(5,"Greens"), title = "% tree cover on agricultural land",ncol=1, bty="n",cex=0.8,xjust=0.5,yjust=0.5)
+
+dev.off()
