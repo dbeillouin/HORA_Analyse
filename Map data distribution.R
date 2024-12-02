@@ -115,8 +115,8 @@ d_typology <- d_typology %>%
          `numéro` = gsub(" ", "", numéro, fixed = TRUE))
 
 table(d_typology$Categorie_C, d_typology$Categorie_C2)
-
-d_typology <- d_typology %>% rename(Intervention_by_composition = Categorie_C)
+table(d_typology$Concatenation)
+sort(unique(d_typology$Concatenation))
 
 # correct numero column
 #d_typology <- d_typology %>% mutate(numéro = ifelse(New.ID=="2170",sub(".*\\.", "", numéro),numéro))
@@ -129,6 +129,8 @@ d <- as.data.frame(d) %>% right_join(
 
 #check <- d %>% filter(is.na(New.ID))
 #check <- d %>% select(New.ID, numéro, Number_Total, Number_Woody, `species treatment`, `species control`, NB_sp, NB_spC) %>% filter(is.na(NB_sp))
+
+d <- d %>% mutate(Intervention_by_composition = Categorie_C) # CHANGE THIS?
 
 d <- d %>%
   mutate(intervention_by_complexity = case_when(Number_Total==2 & Intervention_reclass %in% c("Alley cropping","Hedgerows") ~ "Very simple",
@@ -280,7 +282,6 @@ write.csv(d_map,"data_map.csv",row.names=FALSE)
 write.table(d_map,"data_map.txt")
 
 #### Map number of experiments per region ####
-# Note this code wasn't used to make final figure for time and aesthetic reasons 
 
 #library(installr)
 #install.Rtools(check = TRUE, check_r_update = TRUE, GUI = TRUE)
@@ -297,6 +298,7 @@ library(viridis)
 library(sf)
 library(tmap)
 library(RColorBrewer)
+library(exactextractr)
 
 #Set parameters for mapping
 crs_wgs84 <-  "+proj=longlat +datum=WGS84 +no_defs"
@@ -358,7 +360,6 @@ st_write(d_map_sf,"data_map.shp",append=FALSE)
 
 # get proportion of experiments per region
 #install.packages("exactextractr")
-library(exactextractr)
 
 continents <- world_ne %>%
   group_by(region_un) %>%
@@ -444,7 +445,6 @@ sum(continent_prop$hora_n_per_int_cton_per_continent, na.rm=TRUE)
 
 write.csv(continent_prop,"data_distribution_per_continent.csv")
 
-
 ##### Make figures #######
 
 # Scatter plot showing % land with trees and % experiments per continent
@@ -470,7 +470,6 @@ g_scatter
 
 # Bar chart showing proportions per intervention per continent
 
-# CHECK and get these colours matching ArcGIS map
 col.int <- c("1"= "lightblue","2"="blue3","3"="lightgreen",
              "4"="forestgreen","5"="darkgreen","6-10"="violet",
              "11-20"="purple", "21-44"="purple4")
