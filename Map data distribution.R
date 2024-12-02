@@ -117,6 +117,7 @@ d_typology <- d_typology %>%
 table(d_typology$Categorie_C, d_typology$Categorie_C2)
 table(d_typology$Concatenation)
 sort(unique(d_typology$Concatenation))
+sort(unique(d_typology$Categorie))
 
 # correct numero column
 #d_typology <- d_typology %>% mutate(numéro = ifelse(New.ID=="2170",sub(".*\\.", "", numéro),numéro))
@@ -130,7 +131,7 @@ d <- as.data.frame(d) %>% right_join(
 #check <- d %>% filter(is.na(New.ID))
 #check <- d %>% select(New.ID, numéro, Number_Total, Number_Woody, `species treatment`, `species control`, NB_sp, NB_spC) %>% filter(is.na(NB_sp))
 
-d <- d %>% mutate(Intervention_by_composition = Categorie_C) # CHANGE THIS?
+d <- d %>% mutate(Intervention_by_composition = Categorie) # CHANGE THIS?
 
 d <- d %>%
   mutate(intervention_by_complexity = case_when(Number_Total==2 & Intervention_reclass %in% c("Alley cropping","Hedgerows") ~ "Very simple",
@@ -365,6 +366,10 @@ continents <- world_ne %>%
   group_by(region_un) %>%
   summarize(geometry = st_union(geometry))
 
+subregions <- world_ne %>%
+  group_by(subregion) %>%
+  summarize(geometry = st_union(geometry))
+
 countries <- world_ne %>%
   group_by(geounit) %>%
   summarize(geometry = st_union(geometry))
@@ -376,11 +381,12 @@ tree_ag_non_na_areas <- exact_extract(tree_ag, continents, function(values, cove
   sum((!is.na(values) & values>0) * coverage_fraction)
 })
 
+write.csv(data.frame(tree_ag_non_na_areas),"proportions_tree_ag.csv",row.names=FALSE)
 
 # Extract the valid (non-NA) areas on tree_ag rasters for the entire world (therefore representing all agricultural land) - use this for Zomer data
-agland_areas <- exact_extract(tree_ag, st_union(st_geometry(world_ne)), function(values, coverage_fraction) {
-  sum(!is.na(values)  * coverage_fraction)
-})
+#agland_areas <- exact_extract(tree_ag, st_union(st_geometry(world_ne)), function(values, #coverage_fraction) {
+#  sum(!is.na(values)  * coverage_fraction)
+#})
 
 # Extract the cropland areas for each continent
 agland_areas <- exact_extract(lulc, continents, function(values, coverage_fraction) {
@@ -389,6 +395,8 @@ agland_areas <- exact_extract(lulc, continents, function(values, coverage_fracti
 })
 
 proportions_global <- tree_ag_non_na_areas / agland_areas
+
+write.csv(data.frame(proportions_global),"proportions_tree_ag_global.csv",row.names=FALSE)
 
 # Calculate the total area of each continent
 continent_areas <- st_area(continents) # returns areas in square meters by default
@@ -401,12 +409,19 @@ proportions_per_cont <- tree_ag_non_na_areas / continent_areas_km2
 continents$tree_ag_proportion_per_cont <- proportions_per_cont
 continents$tree_ag_proportions_global <- proportions_global
 
-# Compute proportion of our experiments in each continent
+# Compute proportion of our experiments in each continent and subregion
 d_map_sf <- st_transform(d_map_sf, crs(continents))
 d_map_sf_w_continents <- st_join(d_map_sf, continents) %>%
   mutate(continent = ifelse(country == "Italy","Europe",
                             ifelse(country == "Canada","North America",
-                                   ifelse(country =="Brazil","South America",continent)))) 
+                                   ifelse(country =="Brazil","South America",continent)))) # region_un
+
+#continents <- continents %>% mutate(continent  = region_un)
+
+d_map_sf_w_subregions <- st_join(d_map_sf, subregions) %>%
+  mutate(subregion = ifelse(country == "Italy","Western Europe",
+                            ifelse(country == "Canada","Northern America",
+                                   ifelse(country =="Brazil","South America",subregion)))) 
 
 # Count the number of points in each continent
 d_map_continent_counts <- data.frame(d_map_sf_w_continents)  %>%
@@ -416,14 +431,35 @@ d_map_continent_counts <- data.frame(d_map_sf_w_continents)  %>%
 
 d_map_continent_counts$n_experiments_cont_proportion_global <- d_map_continent_counts$n_experiments_cont / nrow(d)
 
+# Count the number of points in each sub-region
+d_map_subregion_counts <- data.frame(d_map_sf_w_subregions)  %>%
+  select(New.ID, subregion, geometry, n_experiments) %>% unique() %>%
+  group_by(subregion)  %>%
+  summarize(n_experiments_subregion = sum(n_experiments))
+
+d_map_subregion_counts$n_experiments_subregion_proportion_global <- d_map_subregion_counts$n_experiments_subregion / nrow(d)
+
+d_map_subregion_counts <- d_map_subregion_counts %>% 
+  mutate(subregion_grouped = case_when(subregion %in% c("Eastern Europe","Northern Europe", "Southern Europe","Western Europe")~"Europe", 
+                                       subregion %in% c("Caribbean","Central America" , "South America") ~"South & Central America",
+                                       subregion %in% c("Central Asia","Western Asia")~"Other Asia",
+                                       subregion %in% c("Southern Africa","Eastern Africa","Western Africa","Middle Africa") ~ "Sub-Saharan Africa", 
+                                       subregion %in% c("Australia and New Zealand") ~ "Oceania",
+                                       .default=subregion)) %>%
+  group_by(subregion_grouped)  %>%
+  mutate(n_experiments_subregion_grouped = sum(n_experiments_subregion))
+
+d_map_subregion_counts <- d_map_subregion_counts %>% left_join(d_map_subregion_counts %>% select(subregion_grouped, n_experiments_subregion_grouped) %>% unique() %>% group_by() %>% mutate(n_experiments_total = sum(n_experiments_subregion_grouped)) %>% mutate(subregion_grouped_proportion_global = n_experiments_subregion_grouped/n_experiments_total) %>% ungroup() %>% select(-n_experiments_total))
+
 # Append dataset
 continent_prop <- continents %>% select(continent,tree_ag_proportion_per_cont) %>% as.data.frame() %>% select(-geometry)
 continent_prop <- continents %>% select(continent,tree_ag_proportion_per_cont,tree_ag_proportions_global) %>% as.data.frame() %>% select(-geometry)
 continent_prop <- continent_prop %>% left_join(
   d_map_continent_counts %>% select(continent, n_experiments_cont, n_experiments_cont_proportion_global),by="continent")
+
 #continent_prop <- continent_prop %>% select(-geometry)
 
-# Get count and share of points per intervention in each continent
+# Get count and share of points per intervention in each continent and subregion
 d_map_continent_int_counts <- data.frame(d_map_sf_w_continents)  %>%
   select(New.ID, continent, geometry, int_cton, n_id_composition) %>% unique() %>%
   group_by(continent, int_cton) %>%
@@ -432,6 +468,22 @@ d_map_continent_int_counts <- data.frame(d_map_sf_w_continents)  %>%
 d_map_continent_int_counts <- left_join(d_map_continent_int_counts,
     data.frame(d_map_continent_counts)) %>%
   mutate(hora_n_int_cton_proportion_continent = hora_n_per_int_cton_per_continent/n_experiments_cont)
+
+d_map_subregion_int_counts <- data.frame(d_map_sf_w_subregions)  %>%
+  select(New.ID, subregion, geometry, int_cton, n_id_composition) %>% unique() %>%
+  group_by(subregion, int_cton) %>%
+  summarize(hora_n_per_int_cton_per_subregion = sum(n_id_composition))
+
+d_map_subregion_int_counts <- left_join(d_map_subregion_int_counts,
+                                        data.frame(d_map_subregion_counts)) %>%
+  mutate(hora_n_int_cton_proportion_subregion = hora_n_per_int_cton_per_subregion/n_experiments_subregion) %>%
+  group_by(subregion_grouped, int_cton) %>%
+  mutate(hora_n_per_int_cton_per_subregion_grouped = sum(hora_n_per_int_cton_per_subregion)) %>% ungroup() %>%
+  mutate(hora_n_per_int_cton_per_subregion_grouped = hora_n_per_int_cton_per_subregion_grouped/n_experiments_subregion_grouped) %>% 
+  select(subregion_grouped,int_cton, n_experiments_subregion_grouped, subregion_grouped_proportion_global,hora_n_per_int_cton_per_subregion_grouped ) %>% unique()
+
+d_map_subregion_int_counts <- d_map_subregion_int_counts %>% 
+  mutate(subregion_grouped_label = paste0(subregion_grouped, " (", n_experiments_subregion_grouped,")"))
 
 # Append dataset
 continent_prop <- continent_prop %>% left_join(data.frame(d_map_continent_int_counts) %>% select(continent,int_cton, hora_n_per_int_cton_per_continent, hora_n_int_cton_proportion_continent), by="continent") 
@@ -443,6 +495,7 @@ continent_prop <- continent_prop %>%
 
 sum(continent_prop$hora_n_per_int_cton_per_continent, na.rm=TRUE)
 
+#write.csv(continent_prop,"data_distribution_per_unregion.csv")
 write.csv(continent_prop,"data_distribution_per_continent.csv")
 
 ##### Make figures #######
@@ -450,7 +503,7 @@ write.csv(continent_prop,"data_distribution_per_continent.csv")
 # Scatter plot showing % land with trees and % experiments per continent
 g_scatter <- ggplot(continent_prop %>% filter(!continent %in% c("Seven seas (open ocean)","Antarctica")), aes(x=n_experiments_cont_proportion_global*100, y=tree_ag_proportions_global*100, colour=continent, size=n_experiments_cont))+
   geom_point()+
-  geom_text(aes(label=continent,colour=continent),size=3,nudge_x=3.5, nudge_y=-1.8,show.legend=FALSE)+
+  geom_text(aes(label=continent,colour=continent),size=3.2,nudge_x=4, nudge_y=3,show.legend=FALSE)+
   coord_cartesian(expand=c(0))+
   labs(x="Share of experiments per region (%)", 
        y="Share of cropland with tree cover (%)")+
@@ -478,6 +531,8 @@ sort(unique(d_map$Intervention_by_composition))
 
 col.int <- c("(HNE), HE, WE" = "purple4" , "(HNE), WE"="lightblue", "(HNE), WNE, WE"="lightgreen",   "WNE" ="forestgreen", "HNE, WNE" ="violet", "HE"  ="purple2", "Autre"= "steelblue")
 
+col.int <- c("(HNE), HE, WE" = "lightgreen" , "(HNE), WE"="lightblue", "(HNE), WNE, WE" =  "purple4",   "(HNE), WNE, HE, WE" ="forestgreen","(HNE), WNE, HE"  ="purple2")
+
 g_prop <- ggplot(continent_prop %>% filter(!continent %in% c("Seven seas (open ocean)","Antarctica")), aes(y=reorder(continent,desc(continent)),x=hora_n_int_cton_proportion_continent*100, fill=int_cton))+
   geom_col(position=position_stack())+
   labs(x="Proportion of studies (%)",y="")+
@@ -486,26 +541,48 @@ g_prop <- ggplot(continent_prop %>% filter(!continent %in% c("Seven seas (open o
   theme(legend.position="top",legend.direction = "horizontal",
         legend.text = element_text(size=8),
         legend.title = element_text(size=10))+
-  guides(fill=guide_legend(reverse=TRUE))
+  guides(fill=guide_legend(reverse=TRUE,nrow=2))
 g_prop
 
 #ggsave("data_proportions_barchart.png",width=3,height=2.5,units="in")
-tiff("data_proportions_int_region_barchart.tif",width=350,height=310,units="px")
+tiff("data_proportions_int_region_barchart_unregion.tif",width=350,height=310,units="px")
 g_prop
 dev.off()
 
-png("data_proportions_int_region_barchart.png",width=490,height=310,units="px")
-g
+png("data_proportions_int_region_barchart_unregion.png",width=490,height=310,units="px")
+g_prop
 dev.off()
+
+g_prop <- ggplot(d_map_subregion_int_counts, aes(y=reorder(str_wrap(subregion_grouped_label, 15),n_experiments_subregion_grouped),x=hora_n_per_int_cton_per_subregion_grouped*100, fill=int_cton))+
+  geom_col(position=position_stack())+
+  labs(x="Proportion of studies (%)",y="")+
+  scale_fill_manual(values=col.int,name="")+
+  theme_classic()+
+  theme(legend.position="top",legend.direction = "horizontal",
+        legend.text = element_text(size=8),
+        legend.title = element_text(size=10))+
+  guides(fill=guide_legend(reverse=TRUE,nrow=2))
+g_prop
+
+#ggsave("data_proportions_barchart.png",width=3,height=2.5,units="in")
+tiff("data_proportions_int_region_barchart_subregion.tif",width=350,height=310,units="px")
+g_prop
+dev.off()
+
+png("data_proportions_int_region_barchart_subregion.png",width=490,height=310,units="px")
+g_prop
+dev.off()
+
 
 # Make map
 library(reshape2)
+library(stars)
+library(cowplot)
 
 # Plot with ggplot but raster plotting takes a long time
 
 #tree_ag_df <- as.data.frame(tree_ag, xy = TRUE) # memory limit exceeded
 
-library(stars)
 g_map <- ggplot() + 
   #geom_raster(data=tree_ag_df, aes(x=x, y=y, fill=value), alpha=0.8) +
   #geom_stars(data=tree_ag, downsample = 10) +
@@ -530,8 +607,6 @@ g_map <- ggplot() +
 g_map
 
 #ggsave("Map of interventions.tiff",width=8,height=4)
-
-library(cowplot)
 legend <- get_legend(g_map+theme(legend.position="right",
                              legend.direction="vertical",
                              legend.background=element_blank())+
@@ -542,32 +617,32 @@ legend <- get_legend(g_map+theme(legend.position="right",
                                                title="Number of experiments",
                                                title.theme = element_text(size = 10,face = "bold",colour = "black",angle = 0))))
                            
-p1 <- plot_grid(g_map,legend, labels = c('A', ''), label_size = 12, ncol=2,rel_widths = c(0.8, 0.2))
-p2 <- plot_grid(g_prop,g_scatter, labels = c("B","C"),label_size = 12, ncol= 2, rel_widths = c(0.5,0.5))
+p1 <- plot_grid(g_map,legend, labels = c('a.', ''), label_size = 12, ncol=2,rel_widths = c(0.8, 0.2))
+p2 <- plot_grid(g_prop,g_scatter, labels = c("b.","c."),label_size = 12, ncol= 2, rel_widths = c(0.5,0.5))
 p2
 
-tiff("Map of interventions.tiff",width=8,height=5,res=300,units="in")
+tiff("Map of interventions_unregions.tiff",width=8,height=5,res=300,units="in")
 p1
 dev.off()
 
-tiff("Map of charts.tiff",width=8,height=4,res=300,units="in")
+tiff("Map of charts_unregions.tiff",width=8,height=4,res=300,units="in")
 p2
 dev.off()
 
-tiff("Map of interventions and charts below.tiff",width=8,height=8,res=300,units="in")
-plot_grid(p1,p2,labels=c('',''), label_size=12, ncol=1, rel_heights=c(0.6,0.4))
+tiff("Map of interventions and charts below_subregions.tiff",width=8,height=8,res=300,units="in")
+plot_grid(p1,p2,labels=c('',''), label_size=12, ncol=1, rel_heights=c(0.5,0.5))
 dev.off()
 
-png("Map of interventions.png",width=8,height=5,res=300,units="in")
+png("Map of interventions_unregions.png",width=8,height=5,res=300,units="in")
 p1
 dev.off()
 
-png("Map of charts.png",width=8,height=4,res=300,units="in")
+png("Map of charts_unregions.png",width=8,height=4,res=300,units="in")
 p2
 dev.off()
 
-png("Map of interventions and charts below.png",width=8,height=8,res=300,units="in")
-plot_grid(p1,p2,labels=c('',''), label_size=12, ncol=1, rel_heights=c(0.6,0.4))
+png("Map of interventions and charts below_subregions.png",width=8,height=8,res=300,units="in")
+plot_grid(p1,p2,labels=c('',''), label_size=12, ncol=1, rel_heights=c(0.5,0.5))
 dev.off()
 
 
@@ -594,7 +669,17 @@ cor.test(check$tree_ag_proportions_global, check$n_experiments_cont_proportion_g
 #### Proportion per biome ####
 
 # Spatial join to add ecoregion information to experiments
-d_map_w_biomes <- st_join(d_map_sf_w_continents, ecoreg, join = st_intersects)
+d_map_w_biomes <- st_join(d_map_sf, ecoreg, join = st_intersects)
+
+#check <- d_map_w_biomes %>% filter(BIOME_NAME == "Deserts & Xeric Shrublands"  )
+#table( d_map_w_biomes$country, d_map_w_biomes$BIOME_NAME)
+#check <- data.frame(d_map_w_biomes) %>% select(New.ID, BIOME_NAME, country) %>% unique()
+#write.csv(check, "d_with_biome.csv",row.names=FALSE)
+#check <- check %>% right_join(d)
+#check <- check %>% filter(BIOME_NAME == "Deserts & Xeric Shrublands" )
+#check <- check %>% left_join(d_typology)
+#ggplot(check, aes(x=Intervention_reclass))+geom_bar()
+#plot(ecoreg['BIOME_NAME'])
 
 biome_prop <- d_map_w_biomes %>%
   select(New.ID,geometry, n_experiments, BIOME_NAME) %>% unique() %>%
@@ -605,6 +690,28 @@ sum(biome_prop$n_per_biome)
 
 biome_prop <- biome_prop %>%
   mutate(Freq = n_per_biome/sum(biome_prop$n_per_biome)*100) 
+
+biome_prop <- biome_prop %>% mutate(biome_label = paste0(BIOME_NAME," (",n_per_biome,")"))
+
+g_biome <- ggplot(biome_prop %>% filter(!is.na(BIOME_NAME)), aes(y=reorder(str_wrap(biome_label, 30),Freq),x=Freq))+
+  geom_col(fill="grey50")+
+  labs(x="Proportion of experiments (%)",y="")+
+  theme_classic()+
+  theme(legend.position="top",legend.direction = "horizontal",
+        legend.text = element_text(size=8),
+        legend.title = element_text(size=10))+
+  guides(fill=guide_legend(reverse=TRUE,nrow=2))
+g_biome
+
+#ggsave("data_proportions_barchart.png",width=3,height=2.5,units="in")
+tiff("data_biome_barchart.tif",width=7,height=5,res=300,units="in")
+g_biome
+dev.off()
+
+png("data_biome_barchart.png",width=7,height=5,units="in",res=300)
+g_biome
+dev.off()
+
 
 # Calculate share of cropland with trees, per biome
 tree_ag_non_na_areas_biomes <- exact_extract(tree_ag, ecoreg, function(values, coverage_fraction) {
