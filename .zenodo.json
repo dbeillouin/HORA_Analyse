@@ -1,0 +1,19 @@
+{
+  "title": "Analysis code and database for \"Non-cereal agroforestry as a globally overlooked reservoir of biodiversity and nutritional diversity\"",
+  "upload_type": "software",
+  "license": "MIT",
+  "access_right": "open",
+  "description": "R code and curated database used to produce all analyses and figures of a global systematic review of non-cereal agroforestry systems (4,512 paired experiments, 638 studies, 83 countries). Includes the experiment database, the species characteristics table, the ecosystem-service classification, and a README giving the run order and package requirements. No account or login is required to access or run the analysis.",
+  "keywords": ["agroforestry", "agrobiodiversity", "systematic review", "threatened species", "ecosystem services", "R"],
+  "creators": [
+    {"name": "Beillouin, Damien", "affiliation": "CIRAD, UPR HortSys, Montpellier, France"},
+    {"name": "Fauchon, Paul", "affiliation": "CIRAD, UPR HortSys, Montpellier, France"},
+    {"name": "Cook-Patton, Susan C.", "affiliation": "The Nature Conservancy, Arlington VA, USA"},
+    {"name": "Estrada-Carmona, Natalia", "affiliation": "Bioversity International, Montpellier, France"},
+    {"name": "Isaac, Marney E.", "affiliation": "University of Toronto, Toronto, Canada"},
+    {"name": "Lauri, Pierre-Eric", "affiliation": "ABSys, University of Montpellier, France"},
+    {"name": "Makowski, David", "affiliation": "MIAT, INRAE, Paris, France"},
+    {"name": "Malézieux, Eric", "affiliation": "CIRAD, UPR HortSys, Montpellier, France"},
+    {"name": "Jones, Sarah K.", "affiliation": "Bioversity International, Montpellier, France"}
+  ]
+}

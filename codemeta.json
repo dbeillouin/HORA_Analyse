@@ -1,0 +1,145 @@
+{
+  "@context": "https://doi.org/10.5063/schema/codemeta-2.0",
+  "@type": "SoftwareSourceCode",
+  "name": "Analysis code and database for \"Non-cereal agroforestry as a globally overlooked reservoir of biodiversity and nutritional diversity\"",
+  "description": "R code and curated database used to produce all analyses and figures of a global systematic review of non-cereal agroforestry systems, covering 4,512 paired experiments from 638 studies across 83 countries. Includes the experiment database, the species characteristics table, the ecosystem-service classification, and a README giving the run order and package requirements. No account or login is required to access or run the analysis.",
+  "version": "1.0.0",
+  "dateCreated": "2026-09-09",
+  "datePublished": "2026-09-09",
+  "license": "https://spdx.org/licenses/MIT",
+  "programmingLanguage": [
+    {
+      "@type": "ComputerLanguage",
+      "name": "R",
+      "version": ">=4.2"
+    }
+  ],
+  "runtimePlatform": "R",
+  "developmentStatus": "active",
+  "keywords": [
+    "agroforestry",
+    "agrobiodiversity",
+    "systematic review",
+    "threatened species",
+    "plant co-occurrence networks",
+    "ecosystem services"
+  ],
+  "author": [
+    {
+      "@type": "Person",
+      "givenName": "Damien",
+      "familyName": "Beillouin",
+      "email": "d.beillouin@cirad.fr",
+      "affiliation": {
+        "@type": "Organization",
+        "name": "CIRAD, UPR HortSys, Montpellier, France"
+      }
+    },
+    {
+      "@type": "Person",
+      "givenName": "Paul",
+      "familyName": "Fauchon",
+      "affiliation": {
+        "@type": "Organization",
+        "name": "CIRAD, UPR HortSys, Montpellier, France"
+      }
+    },
+    {
+      "@type": "Person",
+      "givenName": "Susan C.",
+      "familyName": "Cook-Patton",
+      "affiliation": {
+        "@type": "Organization",
+        "name": "The Nature Conservancy, Arlington VA, USA"
+      }
+    },
+    {
+      "@type": "Person",
+      "givenName": "Natalia",
+      "familyName": "Estrada-Carmona",
+      "affiliation": {
+        "@type": "Organization",
+        "name": "Bioversity International, Montpellier, France"
+      }
+    },
+    {
+      "@type": "Person",
+      "givenName": "Marney E.",
+      "familyName": "Isaac",
+      "affiliation": {
+        "@type": "Organization",
+        "name": "University of Toronto, Toronto, Canada"
+      }
+    },
+    {
+      "@type": "Person",
+      "givenName": "Pierre-Eric",
+      "familyName": "Lauri",
+      "affiliation": {
+        "@type": "Organization",
+        "name": "ABSys, University of Montpellier, France"
+      }
+    },
+    {
+      "@type": "Person",
+      "givenName": "David",
+      "familyName": "Makowski",
+      "affiliation": {
+        "@type": "Organization",
+        "name": "MIAT, INRAE, Paris, France"
+      }
+    },
+    {
+      "@type": "Person",
+      "givenName": "Eric",
+      "familyName": "Malézieux",
+      "affiliation": {
+        "@type": "Organization",
+        "name": "CIRAD, UPR HortSys, Montpellier, France"
+      }
+    },
+    {
+      "@type": "Person",
+      "givenName": "Sarah K.",
+      "familyName": "Jones",
+      "affiliation": {
+        "@type": "Organization",
+        "name": "Bioversity International, Montpellier, France"
+      }
+    }
+  ],
+  "maintainer": {
+    "@type": "Person",
+    "givenName": "Damien",
+    "familyName": "Beillouin",
+    "email": "d.beillouin@cirad.fr"
+  },
+  "funder": [
+    {
+      "@type": "Organization",
+      "name": "Agropolis Fondation (Labex AGRO 2011-LABX-002, I-Site MUSE)"
+    },
+    {
+      "@type": "Organization",
+      "name": "Agrobiodiversity Index Food Planet Prize"
+    }
+  ],
+  "softwareRequirements": [
+    "R >= 4.2",
+    "tidyverse",
+    "readr",
+    "dplyr",
+    "tidyr",
+    "stringr",
+    "ggplot2",
+    "patchwork",
+    "scales",
+    "ragg",
+    "ggalluvial",
+    "ggnewscale",
+    "ComplexUpset"
+  ],
+  "codeRepository": "https://github.com/dbeillouin/HORA_Analyse",
+  "issueTracker": "https://github.com/dbeillouin/HORA_Analyse/issues",
+  "readme": "https://github.com/dbeillouin/HORA_Analyse/blob/master/README.md"
+}

@@ -1,0 +1,79 @@
+cff-version: 1.2.0
+title: >-
+  Analysis code and database for "Non-cereal agroforestry as a globally
+  overlooked reservoir of biodiversity and nutritional diversity"
+message: >-
+  If you use this software or the accompanying database, please cite both the
+  archived release and the associated article.
+type: software
+authors:
+  - family-names: Beillouin
+    given-names: Damien
+    affiliation: CIRAD, UPR HortSys, Montpellier, France
+    email: d.beillouin@cirad.fr
+  - family-names: Fauchon
+    given-names: Paul
+    affiliation: CIRAD, UPR HortSys, Montpellier, France
+  - family-names: Cook-Patton
+    given-names: Susan C.
+    affiliation: The Nature Conservancy, Arlington VA, USA
+  - family-names: Estrada-Carmona
+    given-names: Natalia
+    affiliation: Bioversity International, Montpellier, France
+  - family-names: Isaac
+    given-names: Marney E.
+    affiliation: University of Toronto, Toronto, Canada
+  - family-names: Lauri
+    given-names: Pierre-Eric
+    affiliation: ABSys, University of Montpellier, France
+  - family-names: Makowski
+    given-names: David
+    affiliation: MIAT, INRAE, Paris, France
+  - family-names: Malézieux
+    given-names: Eric
+    affiliation: CIRAD, UPR HortSys, Montpellier, France
+  - family-names: Jones
+    given-names: Sarah K.
+    affiliation: Bioversity International, Montpellier, France
+repository-code: 'https://github.com/dbeillouin/HORA_Analyse'
+url: 'https://github.com/dbeillouin/HORA_Analyse'
+abstract: >-
+  R code and curated database used to produce all analyses and figures of a
+  global systematic review of non-cereal agroforestry systems, covering 4,512
+  paired experiments from 638 studies across 83 countries.
+keywords:
+  - agroforestry
+  - agrobiodiversity
+  - systematic review
+  - threatened species
+  - plant co-occurrence networks
+  - ecosystem services
+license: MIT
+version: 1.0.0
+date-released: 2026-09-09
+preferred-citation:
+  type: article
+  title: >-
+    Non-cereal agroforestry as a globally overlooked reservoir of biodiversity
+    and nutritional diversity
+  authors:
+    - family-names: Beillouin
+      given-names: Damien
+    - family-names: Fauchon
+      given-names: Paul
+    - family-names: Cook-Patton
+      given-names: Susan C.
+    - family-names: Estrada-Carmona
+      given-names: Natalia
+    - family-names: Isaac
+      given-names: Marney E.
+    - family-names: Lauri
+      given-names: Pierre-Eric
+    - family-names: Makowski
+      given-names: David
+    - family-names: Malézieux
+      given-names: Eric
+    - family-names: Jones
+      given-names: Sarah K.
+  journal: Cell Reports Sustainability
+  year: 2026
