@@ -37,69 +37,6 @@
     },
     {
       "@type": "Person",
-      "givenName": "Paul",
-      "familyName": "Fauchon",
-      "affiliation": {
-        "@type": "Organization",
-        "name": "CIRAD, UPR HortSys, Montpellier, France"
-      }
-    },
-    {
-      "@type": "Person",
-      "givenName": "Susan C.",
-      "familyName": "Cook-Patton",
-      "affiliation": {
-        "@type": "Organization",
-        "name": "The Nature Conservancy, Arlington VA, USA"
-      }
-    },
-    {
-      "@type": "Person",
-      "givenName": "Natalia",
-      "familyName": "Estrada-Carmona",
-      "affiliation": {
-        "@type": "Organization",
-        "name": "Bioversity International, Montpellier, France"
-      }
-    },
-    {
-      "@type": "Person",
-      "givenName": "Marney E.",
-      "familyName": "Isaac",
-      "affiliation": {
-        "@type": "Organization",
-        "name": "University of Toronto, Toronto, Canada"
-      }
-    },
-    {
-      "@type": "Person",
-      "givenName": "Pierre-Eric",
-      "familyName": "Lauri",
-      "affiliation": {
-        "@type": "Organization",
-        "name": "ABSys, University of Montpellier, France"
-      }
-    },
-    {
-      "@type": "Person",
-      "givenName": "David",
-      "familyName": "Makowski",
-      "affiliation": {
-        "@type": "Organization",
-        "name": "MIAT, INRAE, Paris, France"
-      }
-    },
-    {
-      "@type": "Person",
-      "givenName": "Eric",
-      "familyName": "Malézieux",
-      "affiliation": {
-        "@type": "Organization",
-        "name": "CIRAD, UPR HortSys, Montpellier, France"
-      }
-    },
-    {
-      "@type": "Person",
       "givenName": "Sarah K.",
       "familyName": "Jones",
       "affiliation": {

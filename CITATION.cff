@@ -11,32 +11,9 @@ authors:
     given-names: Damien
     affiliation: CIRAD, UPR HortSys, Montpellier, France
     email: d.beillouin@cirad.fr
-  - family-names: Fauchon
-    given-names: Paul
-    affiliation: CIRAD, UPR HortSys, Montpellier, France
-  - family-names: Cook-Patton
-    given-names: Susan C.
-    affiliation: The Nature Conservancy, Arlington VA, USA
-  - family-names: Estrada-Carmona
-    given-names: Natalia
-    affiliation: Bioversity International, Montpellier, France
-  - family-names: Isaac
-    given-names: Marney E.
-    affiliation: University of Toronto, Toronto, Canada
-  - family-names: Lauri
-    given-names: Pierre-Eric
-    affiliation: ABSys, University of Montpellier, France
-  - family-names: Makowski
-    given-names: David
-    affiliation: MIAT, INRAE, Paris, France
-  - family-names: Malézieux
-    given-names: Eric
-    affiliation: CIRAD, UPR HortSys, Montpellier, France
   - family-names: Jones
     given-names: Sarah K.
     affiliation: Bioversity International, Montpellier, France
-repository-code: 'https://github.com/dbeillouin/HORA_Analyse'
-url: 'https://github.com/dbeillouin/HORA_Analyse'
 abstract: >-
   R code and curated database used to produce all analyses and figures of a
   global systematic review of non-cereal agroforestry systems, covering 4,512
