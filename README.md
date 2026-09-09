@@ -1,5 +1,8 @@
 # Non-cereal agroforestry as a globally overlooked reservoir of biodiversity and nutritional diversity
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22671247.svg)](https://doi.org/10.5281/zenodo.22671247)
+[![Software Heritage](https://archive.softwareheritage.org/badge/origin/https://github.com/dbeillouin/HORA_Analyse/)](https://archive.softwareheritage.org/browse/origin/https://github.com/dbeillouin/HORA_Analyse/)
+
 Data and analysis code for Beillouin et al., *Cell Reports Sustainability*
 (manuscript CR-SUSTAINABILITY-D-25-00109).
 
@@ -75,12 +78,17 @@ the FAO classification, completed with Ecocrop. Searches were run on
 
 ## Archived version and citation
 
-This repository is archived on Zenodo, which assigns a DOI to each release.
-`CITATION.cff` carries the software metadata; GitHub and Zenodo both read it, so
-the "Cite this repository" button and the Zenodo record stay in step with it.
+This repository is archived on Zenodo, which assigns a DOI to each release, and
+in Software Heritage, which archives the full git history.
 
-To cite the code and data, use the DOI of the release; to cite the study, use
-the article.
+- **Concept DOI (all versions, use this one):** [10.5281/zenodo.22671247](https://doi.org/10.5281/zenodo.22671247)
+- Version DOI (v1.0.0): [10.5281/zenodo.22671248](https://doi.org/10.5281/zenodo.22671248)
+- Software Heritage identifier of the released tree:
+  `swh:1:dir:108687528034ea055bab4a580c08f0cdebfd086b`
+
+The code and the curated database were produced by D. Beillouin and S. K. Jones;
+`CITATION.cff` records them as the authors of the software and the article as the
+preferred citation for the study.
 
 ## Licence
 
